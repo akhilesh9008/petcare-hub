@@ -1,0 +1,1041 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PET_OWNER
+  VETERINARIAN
+  SERVICE_PROVIDER
+  ADMIN
+}
+
+enum PetSpecies {
+  DOG
+  CAT
+  BIRD
+  RABBIT
+  OTHER
+}
+
+enum PetGender {
+  MALE
+  FEMALE
+  UNKNOWN
+}
+
+enum ActivityLevel {
+  LOW
+  MODERATE
+  HIGH
+}
+
+enum WearableDeviceStatus {
+  PAIRED
+  OFFLINE
+  UNPAIRED
+}
+
+enum HealthBandDataSource {
+  BAND
+  OWNER
+  SYSTEM
+}
+
+enum PetHabitType {
+  WALK
+  PLAY
+  SLEEP
+  FEEDING
+  WATER
+  POTTY
+  MEDICATION
+  GROOMING
+}
+
+enum HealthBandAlertType {
+  HIGH_RESTING_HEART_RATE
+  LOW_ACTIVITY
+  LOW_SLEEP
+  DEVICE_OFFLINE
+}
+
+enum HealthBandAlertSeverity {
+  INFO
+  WARNING
+  URGENT
+}
+
+enum HealthBandAlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+enum MedicalRecordType {
+  CONSULTATION
+  VACCINATION
+  LAB_RESULT
+  SURGERY
+  DIAGNOSIS
+  WELLNESS
+  OTHER
+}
+
+enum DocumentType {
+  PRESCRIPTION
+  LAB_REPORT
+  VACCINATION_CERTIFICATE
+  DISCHARGE_SUMMARY
+  IMAGE
+  OTHER
+}
+
+enum MedicationStatus {
+  ACTIVE
+  COMPLETED
+  STOPPED
+}
+
+enum AppointmentType {
+  IN_PERSON
+  ONLINE
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum ProductAgeGroup {
+  BABY
+  JUNIOR
+  ADULT
+  SENIOR
+  ALL_LIFE_STAGES
+}
+
+enum OrderStatus {
+  PLACED
+  CONFIRMED
+  PACKED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum ServiceCategory {
+  VETERINARY
+  GROOMING
+  BOARDING
+  WALKING
+  TRAINING
+  SITTING
+  PHOTOGRAPHY
+}
+
+enum ServiceBookingStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  REJECTED
+}
+
+enum ReminderType {
+  VACCINATION
+  MEDICATION
+  VET_APPOINTMENT
+  GROOMING
+  FOOD_REFILL
+  DEWORMING
+  CUSTOM
+}
+
+enum ReminderStatus {
+  PENDING
+  COMPLETED
+  DISMISSED
+}
+
+enum ReminderRecurrence {
+  NONE
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+  CUSTOM
+}
+
+enum ReminderSource {
+  MANUAL
+  VACCINATION
+  MEDICATION
+  APPOINTMENT
+}
+
+enum NotificationType {
+  REMINDER
+  APPOINTMENT
+  ORDER
+  SERVICE_BOOKING
+  HEALTH
+  SYSTEM
+}
+
+enum ReviewTarget {
+  VETERINARIAN
+  SERVICE_PROVIDER
+  PRODUCT
+}
+
+enum AIMessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum RecommendationSource {
+  RULE_BASED
+  PURCHASE_HISTORY
+  MANUAL
+}
+
+enum PetAccessScope {
+  READ_HEALTH
+  WRITE_HEALTH
+}
+
+model User {
+  id                    String                    @id @default(cuid())
+  name                  String
+  email                 String                    @unique
+  phone                 String?                   @unique
+  passwordHash          String
+  role                  Role                      @default(PET_OWNER)
+  imageUrl              String?
+  emailVerifiedAt       DateTime?
+  isActive              Boolean                   @default(true)
+  deletedAt             DateTime?
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+
+  pets                  Pet[]
+  veterinarian          Veterinarian?
+  serviceProvider       ServiceProvider?
+  addresses             Address[]
+  cart                  Cart?
+  orders                Order[]
+  appointments          Appointment[]             @relation("AppointmentOwner")
+  serviceBookings       ServiceBooking[]          @relation("ServiceBookingOwner")
+  reminders             Reminder[]                @relation("ReminderOwner")
+  notifications         Notification[]
+  reviews               Review[]
+  aiConversations       AIConversation[]
+  sessions              Session[]
+  createdMedicalRecords MedicalRecord[]           @relation("MedicalRecordCreator")
+  addedVaccinations     Vaccination[]             @relation("VaccinationCreator")
+  addedMedications      Medication[]              @relation("MedicationCreator")
+  recordedWeights       WeightRecord[]            @relation("WeightRecordCreator")
+  uploadedDocuments     HealthDocument[]          @relation("DocumentUploader")
+  grantedPetAccess      VeterinarianPetAccess[]   @relation("AccessGrantor")
+
+  @@index([role, isActive])
+  @@index([deletedAt])
+}
+
+model Session {
+  id               String   @id @default(cuid())
+  userId           String
+  sessionTokenHash String   @unique
+  expiresAt        DateTime
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model Address {
+  id            String   @id @default(cuid())
+  userId        String
+  label         String   @default("Home")
+  recipientName String
+  phone         String
+  line1         String
+  line2         String?
+  city          String
+  state         String
+  pinCode       String
+  country       String   @default("India")
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isDefault])
+}
+
+model Pet {
+  id                 String         @id @default(cuid())
+  ownerId            String
+  name               String
+  species            PetSpecies
+  breed              String?
+  birthDate          DateTime?      @db.Date
+  gender             PetGender      @default(UNKNOWN)
+  weightKg           Decimal?       @db.Decimal(6, 2)
+  color              String?
+  profileImageUrl    String?
+  microchipId        String?        @unique
+  allergies          String[]       @default([])
+  medicalConditions  String[]       @default([])
+  dietaryPreferences String[]       @default([])
+  activityLevel      ActivityLevel  @default(MODERATE)
+  isActive           Boolean        @default(true)
+  deletedAt          DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  owner           User                     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  medicalRecords  MedicalRecord[]
+  vaccinations    Vaccination[]
+  medications     Medication[]
+  weightRecords   WeightRecord[]
+  documents       HealthDocument[]
+  appointments    Appointment[]
+  serviceBookings ServiceBooking[]
+  reminders       Reminder[]
+  accessGrants    VeterinarianPetAccess[]
+  aiConversations AIConversation[]
+  recommendations ProductRecommendation[]
+  wearableDevices PetWearableDevice[]
+  healthBandDailyMetrics PetHealthDailyMetric[]
+  habitEvents     PetHabitEvent[]
+  healthBandAlerts HealthBandAlert[]
+
+  @@index([ownerId, deletedAt])
+  @@index([species])
+}
+
+model Clinic {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  address     String
+  city        String
+  state       String
+  pinCode     String
+  phone       String?
+  email       String?
+  latitude    Decimal? @db.Decimal(9, 6)
+  longitude   Decimal? @db.Decimal(9, 6)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  veterinarians  Veterinarian[]
+  medicalRecords MedicalRecord[]
+  appointments   Appointment[]
+
+  @@index([city, state, isActive])
+}
+
+model Veterinarian {
+  id                      String   @id @default(cuid())
+  userId                  String   @unique
+  clinicId                String?
+  slug                    String   @unique
+  bio                     String?
+  photoUrl                String?
+  qualifications          String[] @default([])
+  specializations         String[] @default([])
+  yearsExperience         Int      @default(0)
+  consultationFee         Decimal  @db.Decimal(10, 2)
+  rating                  Decimal  @default(0) @db.Decimal(3, 2)
+  reviewCount             Int      @default(0)
+  city                    String
+  state                   String
+  isVerified              Boolean  @default(false)
+  isAcceptingAppointments Boolean  @default(true)
+  deletedAt               DateTime?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  user         User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clinic       Clinic?                    @relation(fields: [clinicId], references: [id], onDelete: SetNull)
+  availability VetAvailability[]
+  appointments Appointment[]
+  medicalRecords MedicalRecord[]
+  vaccinations Vaccination[]
+  medications  Medication[]
+  reviews      Review[]                   @relation("VeterinarianReviews")
+  accessGrants VeterinarianPetAccess[]
+
+  @@index([city, isAcceptingAppointments, isVerified])
+  @@index([rating])
+  @@index([clinicId])
+}
+
+model VetAvailability {
+  id             String    @id @default(cuid())
+  veterinarianId String
+  dayOfWeek      Int?
+  date           DateTime? @db.Date
+  startTime      String
+  endTime        String
+  isAvailable    Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  veterinarian Veterinarian @relation(fields: [veterinarianId], references: [id], onDelete: Cascade)
+
+  @@index([veterinarianId, date])
+  @@index([veterinarianId, dayOfWeek])
+}
+
+model VeterinarianPetAccess {
+  id             String         @id @default(cuid())
+  petId          String
+  veterinarianId String
+  grantedById    String
+  scope          PetAccessScope @default(READ_HEALTH)
+  grantedAt      DateTime       @default(now())
+  expiresAt      DateTime?
+  revokedAt      DateTime?
+
+  pet          Pet          @relation(fields: [petId], references: [id], onDelete: Cascade)
+  veterinarian Veterinarian @relation(fields: [veterinarianId], references: [id], onDelete: Cascade)
+  grantedBy    User         @relation("AccessGrantor", fields: [grantedById], references: [id], onDelete: Cascade)
+
+  @@unique([petId, veterinarianId])
+  @@index([veterinarianId, revokedAt])
+}
+
+model MedicalRecord {
+  id                     String            @id @default(cuid())
+  petId                  String
+  veterinarianId         String?
+  clinicId               String?
+  appointmentId          String?           @unique
+  createdById            String?
+  recordType             MedicalRecordType @default(CONSULTATION)
+  occurredAt             DateTime
+  reason                 String?
+  symptoms               String[]          @default([])
+  diagnosis              String?
+  notes                  String?
+  treatment              String?
+  prescription           String?
+  followUpDate           DateTime?         @db.Date
+  isVisibleToOwner       Boolean           @default(true)
+  deletedAt              DateTime?
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+
+  pet          Pet           @relation(fields: [petId], references: [id], onDelete: Cascade)
+  veterinarian Veterinarian? @relation(fields: [veterinarianId], references: [id], onDelete: SetNull)
+  clinic       Clinic?        @relation(fields: [clinicId], references: [id], onDelete: SetNull)
+  appointment  Appointment?   @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  createdBy    User?          @relation("MedicalRecordCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  documents    HealthDocument[]
+  vaccinations Vaccination[]
+  medications  Medication[]
+
+  @@index([petId, occurredAt])
+  @@index([veterinarianId, occurredAt])
+  @@index([deletedAt])
+}
+
+model HealthDocument {
+  id              String       @id @default(cuid())
+  petId           String
+  medicalRecordId String?
+  uploadedById    String?
+  documentType    DocumentType @default(OTHER)
+  fileName        String
+  fileUrl         String
+  mimeType        String
+  fileSizeBytes   Int?
+  createdAt       DateTime     @default(now())
+  deletedAt       DateTime?
+
+  pet           Pet            @relation(fields: [petId], references: [id], onDelete: Cascade)
+  medicalRecord MedicalRecord? @relation(fields: [medicalRecordId], references: [id], onDelete: SetNull)
+  uploadedBy    User?          @relation("DocumentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([petId, createdAt])
+  @@index([medicalRecordId])
+}
+
+model Vaccination {
+  id              String    @id @default(cuid())
+  petId           String
+  veterinarianId  String?
+  medicalRecordId String?
+  createdById     String?
+  vaccineName     String
+  administeredAt  DateTime  @db.Date
+  nextDueDate     DateTime? @db.Date
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  pet           Pet            @relation(fields: [petId], references: [id], onDelete: Cascade)
+  veterinarian  Veterinarian?  @relation(fields: [veterinarianId], references: [id], onDelete: SetNull)
+  medicalRecord MedicalRecord? @relation(fields: [medicalRecordId], references: [id], onDelete: SetNull)
+  createdBy     User?          @relation("VaccinationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  reminder      Reminder?
+
+  @@index([petId, nextDueDate])
+  @@index([veterinarianId])
+}
+
+model Medication {
+  id                       String           @id @default(cuid())
+  petId                    String
+  prescribingVeterinarianId String?
+  medicalRecordId          String?
+  createdById              String?
+  name                     String
+  dosage                   String
+  frequency                String
+  startDate                DateTime         @db.Date
+  endDate                  DateTime?        @db.Date
+  instructions             String?
+  status                   MedicationStatus @default(ACTIVE)
+  createdAt                DateTime         @default(now())
+  updatedAt                DateTime         @updatedAt
+
+  pet                    Pet            @relation(fields: [petId], references: [id], onDelete: Cascade)
+  prescribingVeterinarian Veterinarian? @relation(fields: [prescribingVeterinarianId], references: [id], onDelete: SetNull)
+  medicalRecord          MedicalRecord? @relation(fields: [medicalRecordId], references: [id], onDelete: SetNull)
+  createdBy              User?          @relation("MedicationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  reminder               Reminder?
+
+  @@index([petId, status, endDate])
+  @@index([prescribingVeterinarianId])
+}
+
+model WeightRecord {
+  id           String   @id @default(cuid())
+  petId        String
+  recordedById String?
+  recordedAt   DateTime @db.Date
+  weightKg     Decimal  @db.Decimal(6, 2)
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  pet        Pet   @relation(fields: [petId], references: [id], onDelete: Cascade)
+  recordedBy User? @relation("WeightRecordCreator", fields: [recordedById], references: [id], onDelete: SetNull)
+
+  @@unique([petId, recordedAt])
+  @@index([petId, recordedAt])
+}
+
+/// A pet-worn band or collar. The external identifier is unique across the fleet,
+/// while a pet can retain a history of paired and unpaired devices.
+model PetWearableDevice {
+  id               String               @id @default(cuid())
+  petId            String
+  deviceIdentifier String               @unique
+  displayName      String
+  manufacturer     String?
+  model            String?
+  status           WearableDeviceStatus @default(PAIRED)
+  batteryPercent   Int?
+  pairedAt         DateTime             @default(now())
+  lastSyncedAt     DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  pet          Pet                    @relation(fields: [petId], references: [id], onDelete: Cascade)
+  dailyMetrics PetHealthDailyMetric[]
+  habitEvents  PetHabitEvent[]
+  alerts       HealthBandAlert[]
+
+  @@index([petId, status])
+  @@index([lastSyncedAt])
+}
+
+/// One normalized health summary per pet and calendar day. High-frequency raw
+/// samples should stay with the wearable provider rather than the application DB.
+model PetHealthDailyMetric {
+  id                    String               @id @default(cuid())
+  petId                 String
+  deviceId              String?
+  date                  DateTime             @db.Date
+  source                HealthBandDataSource @default(BAND)
+  restingHeartRateBpm   Int?
+  averageHeartRateBpm   Int?
+  maxHeartRateBpm       Int?
+  activityMinutes       Int                  @default(0)
+  steps                 Int?
+  distanceKm            Decimal?             @db.Decimal(7, 2)
+  caloriesKcal          Int?
+  sleepMinutes          Int                  @default(0)
+  sleepQualityScore     Int?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  pet    Pet                 @relation(fields: [petId], references: [id], onDelete: Cascade)
+  device PetWearableDevice? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  alerts HealthBandAlert[]
+
+  @@unique([petId, date])
+  @@index([deviceId, date])
+  @@index([petId, date])
+}
+
+/// A manually entered or wearable-derived behaviour/care event.
+model PetHabitEvent {
+  id            String               @id @default(cuid())
+  petId         String
+  deviceId      String?
+  sourceEventId String?              @unique
+  type          PetHabitType
+  source        HealthBandDataSource @default(OWNER)
+  occurredAt    DateTime
+  durationMinutes Int?
+  quantity      Decimal?             @db.Decimal(10, 2)
+  unit          String?
+  note          String?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  pet    Pet                 @relation(fields: [petId], references: [id], onDelete: Cascade)
+  device PetWearableDevice? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+
+  @@index([petId, occurredAt])
+  @@index([deviceId, occurredAt])
+  @@index([type, occurredAt])
+}
+
+/// A non-diagnostic tracker observation. `dedupeKey` keeps repeated syncs
+/// idempotent and allows an alert to be acknowledged or resolved by its owner.
+model HealthBandAlert {
+  id            String                  @id @default(cuid())
+  petId         String
+  deviceId      String?
+  dailyMetricId String?
+  dedupeKey     String                  @unique
+  type          HealthBandAlertType
+  severity      HealthBandAlertSeverity @default(INFO)
+  status        HealthBandAlertStatus   @default(OPEN)
+  title         String
+  message       String
+  observedAt    DateTime
+  acknowledgedAt DateTime?
+  resolvedAt    DateTime?
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  pet         Pet                   @relation(fields: [petId], references: [id], onDelete: Cascade)
+  device      PetWearableDevice?   @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  dailyMetric PetHealthDailyMetric? @relation(fields: [dailyMetricId], references: [id], onDelete: SetNull)
+
+  @@index([petId, status, observedAt])
+  @@index([dailyMetricId])
+  @@index([deviceId])
+}
+
+model Appointment {
+  id                 String            @id @default(cuid())
+  petId              String
+  ownerId            String
+  veterinarianId     String
+  clinicId           String?
+  scheduledAt        DateTime
+  durationMinutes    Int               @default(30)
+  type               AppointmentType  @default(IN_PERSON)
+  status             AppointmentStatus @default(PENDING)
+  reason             String
+  notes              String?
+  consultationNotes  String?
+  meetingUrl         String?
+  fee                Decimal?          @db.Decimal(10, 2)
+  cancellationReason String?
+  cancelledAt        DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  pet          Pet           @relation(fields: [petId], references: [id], onDelete: Cascade)
+  owner        User          @relation("AppointmentOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  veterinarian Veterinarian  @relation(fields: [veterinarianId], references: [id], onDelete: Restrict)
+  clinic       Clinic?       @relation(fields: [clinicId], references: [id], onDelete: SetNull)
+  medicalRecord MedicalRecord?
+  reminder      Reminder?
+
+  @@index([ownerId, scheduledAt])
+  @@index([petId, scheduledAt])
+  @@index([veterinarianId, scheduledAt])
+  @@index([status, scheduledAt])
+}
+
+model ProductCategory {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  imageUrl    String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products Product[]
+
+  @@index([isActive, sortOrder])
+}
+
+model Product {
+  id               String          @id @default(cuid())
+  categoryId       String
+  name             String
+  slug             String          @unique
+  description      String
+  brand            String
+  sku              String          @unique
+  price            Decimal         @db.Decimal(10, 2)
+  discountPercent  Int             @default(0)
+  images           String[]        @default([])
+  stock            Int             @default(0)
+  rating           Decimal         @default(0) @db.Decimal(3, 2)
+  reviewCount      Int             @default(0)
+  supportedSpecies PetSpecies[]    @default([])
+  ageGroup         ProductAgeGroup @default(ALL_LIFE_STAGES)
+  tags             String[]        @default([])
+  isPrescription   Boolean         @default(false)
+  isActive         Boolean         @default(true)
+  deletedAt        DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  category        ProductCategory          @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  cartItems       CartItem[]
+  orderItems      OrderItem[]
+  reviews         Review[]                  @relation("ProductReviews")
+  recommendations ProductRecommendation[]
+
+  @@index([categoryId, isActive])
+  @@index([price])
+  @@index([rating])
+  @@index([deletedAt])
+}
+
+model Cart {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items CartItem[]
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  cartId    String
+  productId String
+  quantity  Int      @default(1)
+  unitPrice Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cart    Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([cartId, productId])
+  @@index([productId])
+}
+
+model Order {
+  id                  String        @id @default(cuid())
+  userId              String
+  orderNumber         String        @unique
+  status              OrderStatus   @default(PLACED)
+  paymentStatus       PaymentStatus @default(PENDING)
+  paymentMethod       String        @default("MOCK")
+  paymentReference    String?
+  subtotal            Decimal       @db.Decimal(10, 2)
+  discountAmount      Decimal       @default(0) @db.Decimal(10, 2)
+  deliveryFee         Decimal       @default(0) @db.Decimal(10, 2)
+  total               Decimal       @db.Decimal(10, 2)
+  couponCode          String?
+  recipientName       String
+  recipientPhone      String
+  shippingAddressLine1 String
+  shippingAddressLine2 String?
+  shippingCity        String
+  shippingState       String
+  shippingPinCode     String
+  shippingCountry     String        @default("India")
+  cancellationReason  String?
+  placedAt            DateTime      @default(now())
+  confirmedAt         DateTime?
+  shippedAt           DateTime?
+  deliveredAt         DateTime?
+  cancelledAt         DateTime?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  user  User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  items OrderItem[]
+
+  @@index([userId, placedAt])
+  @@index([status, placedAt])
+}
+
+model OrderItem {
+  id             String   @id @default(cuid())
+  orderId        String
+  productId      String?
+  productName    String
+  productSku     String?
+  quantity       Int
+  unitPrice      Decimal  @db.Decimal(10, 2)
+  discountAmount Decimal  @default(0) @db.Decimal(10, 2)
+  totalPrice     Decimal  @db.Decimal(10, 2)
+  createdAt      DateTime @default(now())
+
+  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([productId])
+}
+
+model ServiceProvider {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  businessName        String
+  slug                String   @unique
+  description         String?
+  photoUrl            String?
+  gallery             String[] @default([])
+  address             String?
+  city                String
+  state               String
+  phone               String?
+  rating              Decimal  @default(0) @db.Decimal(3, 2)
+  reviewCount         Int      @default(0)
+  isVerified          Boolean  @default(false)
+  isAcceptingBookings Boolean  @default(true)
+  deletedAt           DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user         User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  services     Service[]
+  availability ServiceProviderAvailability[]
+  bookings     ServiceBooking[]
+  reviews      Review[]                    @relation("ServiceProviderReviews")
+
+  @@index([city, isAcceptingBookings, isVerified])
+  @@index([rating])
+}
+
+model ServiceProviderAvailability {
+  id                String    @id @default(cuid())
+  serviceProviderId String
+  dayOfWeek         Int?
+  date              DateTime? @db.Date
+  startTime         String
+  endTime           String
+  isAvailable       Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  serviceProvider ServiceProvider @relation(fields: [serviceProviderId], references: [id], onDelete: Cascade)
+
+  @@index([serviceProviderId, date])
+  @@index([serviceProviderId, dayOfWeek])
+}
+
+model Service {
+  id               String          @id @default(cuid())
+  providerId       String
+  category         ServiceCategory
+  name             String
+  description      String
+  price            Decimal         @db.Decimal(10, 2)
+  durationMinutes  Int
+  supportedSpecies PetSpecies[]    @default([])
+  imageUrl         String?
+  isActive         Boolean         @default(true)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  provider ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  bookings ServiceBooking[]
+
+  @@index([providerId, isActive])
+  @@index([category, isActive])
+  @@index([price])
+}
+
+model ServiceBooking {
+  id                 String               @id @default(cuid())
+  petId              String
+  ownerId            String
+  serviceId          String
+  serviceProviderId  String
+  scheduledAt        DateTime
+  durationMinutes    Int
+  status             ServiceBookingStatus @default(PENDING)
+  price              Decimal              @db.Decimal(10, 2)
+  notes              String?
+  providerNotes      String?
+  cancellationReason String?
+  cancelledAt        DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  pet             Pet             @relation(fields: [petId], references: [id], onDelete: Cascade)
+  owner           User            @relation("ServiceBookingOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  service         Service         @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  serviceProvider ServiceProvider @relation(fields: [serviceProviderId], references: [id], onDelete: Restrict)
+
+  @@index([ownerId, scheduledAt])
+  @@index([petId, scheduledAt])
+  @@index([serviceProviderId, scheduledAt])
+  @@index([status, scheduledAt])
+}
+
+model Reminder {
+  id             String             @id @default(cuid())
+  petId          String
+  userId         String
+  vaccinationId  String?            @unique
+  medicationId   String?            @unique
+  appointmentId  String?            @unique
+  type           ReminderType
+  source         ReminderSource     @default(MANUAL)
+  title          String
+  description    String?
+  scheduledFor   DateTime
+  recurrence     ReminderRecurrence @default(NONE)
+  intervalDays   Int?
+  status         ReminderStatus     @default(PENDING)
+  completedAt    DateTime?
+  dismissedAt    DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  pet         Pet          @relation(fields: [petId], references: [id], onDelete: Cascade)
+  user        User         @relation("ReminderOwner", fields: [userId], references: [id], onDelete: Cascade)
+  vaccination Vaccination? @relation(fields: [vaccinationId], references: [id], onDelete: Cascade)
+  medication  Medication?  @relation(fields: [medicationId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, scheduledFor])
+  @@index([petId, scheduledFor])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  href      String?
+  metadata  Json?
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt])
+}
+
+model Review {
+  id                String       @id @default(cuid())
+  userId            String
+  veterinarianId    String?
+  serviceProviderId String?
+  productId         String?
+  target            ReviewTarget
+  rating            Int
+  comment           String?
+  isPublished       Boolean      @default(true)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  deletedAt         DateTime?
+
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  veterinarian    Veterinarian?    @relation("VeterinarianReviews", fields: [veterinarianId], references: [id], onDelete: SetNull)
+  serviceProvider ServiceProvider? @relation("ServiceProviderReviews", fields: [serviceProviderId], references: [id], onDelete: SetNull)
+  product         Product?         @relation("ProductReviews", fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([veterinarianId, isPublished])
+  @@index([serviceProviderId, isPublished])
+  @@index([productId, isPublished])
+}
+
+model ProductRecommendation {
+  id          String               @id @default(cuid())
+  petId       String
+  productId   String
+  reasons     String[]             @default([])
+  score       Decimal              @default(0) @db.Decimal(5, 2)
+  source      RecommendationSource @default(RULE_BASED)
+  isDismissed Boolean              @default(false)
+  generatedAt DateTime             @default(now())
+  expiresAt   DateTime?
+
+  pet     Pet     @relation(fields: [petId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([petId, productId])
+  @@index([petId, isDismissed, generatedAt])
+}
+
+model AIConversation {
+  id        String   @id @default(cuid())
+  userId    String
+  petId     String?
+  title     String?
+  summary   String?
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pet      Pet?        @relation(fields: [petId], references: [id], onDelete: SetNull)
+  messages AIMessage[]
+
+  @@index([userId, updatedAt])
+  @@index([petId])
+}
+
+model AIMessage {
+  id             String        @id @default(cuid())
+  conversationId String
+  role           AIMessageRole
+  content        String
+  contextSnapshot Json?
+  safetyFlag     Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+
+  conversation AIConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}
