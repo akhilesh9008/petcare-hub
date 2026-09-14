@@ -22,6 +22,7 @@ The app is usable locally without paid services. Its default local mode persists
 - Searchable/filterable marketplace, profile-aware non-prescription recommendations, cart, mock checkout and order history
 - Service discovery, provider profiles, bookings and provider workflow
 - A scoped PetCare AI chat that summarizes recorded history, prepares vet visits, notices wearable trends and gives profile-aware product context with clear veterinary safety boundaries
+- Pet Digital Twin / Pet Insights: a pet-scoped, source-linked view that connects health, care, routine, wearable, GPS and purchase records to Care Readiness, explainable insights and next best actions
 - Private Health Band API with authenticated pet ownership checks and deterministic demo syncs
 - Owner, veterinarian, provider and admin dashboard experiences
 - Prisma schema for users, pets, records, bookings, marketplace, reminders, notifications, reviews, AI conversations and wearable wellness aggregates
@@ -119,6 +120,32 @@ prisma/               PostgreSQL schema and repeatable seed
 tests/                Business-rule tests
 ```
 
+## Pet Digital Twin architecture
+
+The original feature set remains intact, but the owner experience is now organized around one pet rather than disconnected modules:
+
+```text
+Pet profile / passport
+  -> Health: records, vaccinations, medication, weight
+  -> Care: reminders, vet appointments, service bookings
+  -> Life: habits, Health Band summaries, consented GPS route, orders
+  -> Pet Intelligence: care readiness, source-linked insights, next actions
+  -> Actions: veterinarian, calendar, service, marketplace, AI vet preparation
+```
+
+`src/lib/pet-digital-twin.ts` is the normalized context boundary. It builds a derived event projection from the existing records; it does not create a conflicting second copy of a pet's health history. The owner dashboard, pet profile, `/insights`, PetCare AI, Health Band, care calendar, services, orders and marketplace all link back to the same selected pet.
+
+### Current event and intelligence model
+
+- Event categories: `HEALTH`, `CARE`, `LIFE`, `ACTIVITY`, `LOCATION`, `COMMERCE`, and `PLANNING`
+- Event sources: owner, veterinarian, service provider, wearable and system
+- Record-based insights: vaccine due, overdue task, upcoming appointment, recorded follow-up, weight trend/gap, Health Band observation and pending service booking
+- Care Readiness: a 0-100 completeness score for documented care, explicitly not a health score or diagnosis
+- AI responses: deterministic, pet-scoped summaries with clickable source links to the record, calendar, appointment or Health Band screen used
+- Owner controls: insights can be dismissed or snoozed locally without changing the underlying care record
+
+The current implementation is a modular-monolith foundation. In local demo mode, the UI reads the signed-in browser workspace; server APIs already enforce pet ownership and authorized veterinarian access. A production rollout should persist the event projection, insights, consent grants and audit log in PostgreSQL, then have server-side workers generate reminders and intelligence snapshots.
+
 The UI is intentionally independent of paid infrastructure. Replace the local store/service adapters progressively:
 
 1. Inject Prisma repositories behind the existing domain services.
@@ -143,6 +170,8 @@ Set `DATABASE_URL`, `AUTH_SECRET` and required provider credentials in your host
 ## Future improvements
 
 - Connect the UI store directly to Prisma-backed repositories
+- Persist a dedicated pet-event ledger, insight lifecycle, consent grants, veterinarian sharing scopes and immutable audit records
+- Add server-side scheduled workers for reminder delivery, care-readiness refreshes and insight generation
 - Verified provider onboarding and real availability calendars
 - Object-storage antivirus scanning and signed health-document URLs
 - Email/push/SMS notification adapters and scheduled delivery workers

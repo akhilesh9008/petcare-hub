@@ -4,6 +4,7 @@ export * from "./data-display";
 export * from "./health-visuals";
 export * from "./health-band";
 export * from "./pet-route-map";
+export * from "./pet-intelligence";
 export * from "./states";
 export * from "./ui";
 export * from "./utils";

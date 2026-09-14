@@ -13,6 +13,7 @@ import { usePetcare } from "@/features/petcare-store";
 const ownerNavigation: NavigationItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: Home, exact: true },
   { label: "My Pets", href: "/pets", icon: PawPrint },
+  { label: "Pet Insights", href: "/insights", icon: Sparkles },
   { label: "Digital passport", href: "/passport", icon: QrCode },
   { label: "Health", href: "/health", icon: HeartPulse },
   { label: "Health Band", href: "/health-band", icon: Watch },
@@ -54,6 +55,7 @@ const roleNavigation: Record<string, NavigationItem[]> = {
 const navigationTranslationKeys: Record<string, string> = {
   "Dashboard": "nav.dashboard",
   "My Pets": "nav.pets",
+  "Pet Insights": "nav.insights",
   "Digital passport": "nav.passport",
   "Health": "nav.health",
   "Health Band": "nav.healthBand",

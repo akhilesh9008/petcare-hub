@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { AlertTriangle, Bot, Eraser, Send, Sparkles, Stethoscope } from "lucide-react";
 import { usePetcare } from "@/features/petcare-store";
 import { WorkspaceShell } from "@/features/workspace-shell";
@@ -15,6 +16,7 @@ const suggestions = [
 ];
 
 export default function AiAssistantPage() {
+  const searchParams = useSearchParams();
   const {
     pets,
     records,
@@ -40,10 +42,13 @@ export default function AiAssistantPage() {
     .sort((left, right) => right.date.localeCompare(left.date))[0];
 
   useEffect(() => {
-    if (!pets.some((item) => item.id === petId)) {
+    const requested = searchParams.get("pet");
+    if (requested && pets.some((item) => item.id === requested) && requested !== petId) {
+      setPetId(requested);
+    } else if (!pets.some((item) => item.id === petId)) {
       setPetId(pets[0]?.id ?? "");
     }
-  }, [petId, pets]);
+  }, [petId, pets, searchParams]);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -158,7 +163,10 @@ export default function AiAssistantPage() {
             ) : null}
             {messages.map((message) => (
               <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === "user" ? "rounded-br-md bg-ink text-white" : "rounded-bl-md bg-white text-slate-700 shadow-sm"}`}>{message.text}</div>
+                <div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === "user" ? "rounded-br-md bg-ink text-white" : "rounded-bl-md bg-white text-slate-700 shadow-sm"}`}>
+                  <p>{message.text}</p>
+                  {message.role === "assistant" && message.sources?.length ? <div className="mt-3 flex flex-wrap gap-1.5 border-t border-slate-100 pt-2"><span className="mr-1 text-[11px] font-bold uppercase tracking-[.1em] text-slate-400">Sources</span>{message.sources.map((source) => <Link key={source.id} href={source.href} className="rounded-md bg-teal-50 px-2 py-0.5 text-[11px] font-semibold text-teal-800 hover:bg-teal-100">{source.label}</Link>)}</div> : null}
+                </div>
               </div>
             ))}
             {typing ? <div className="flex justify-start"><div className="flex gap-1 rounded-2xl rounded-bl-md bg-white px-4 py-3 shadow-sm"><span className="h-2 w-2 animate-bounce rounded-full bg-moss" /><span className="h-2 w-2 animate-bounce rounded-full bg-moss [animation-delay:120ms]" /><span className="h-2 w-2 animate-bounce rounded-full bg-moss [animation-delay:240ms]" /></div></div> : null}

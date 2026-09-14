@@ -4,14 +4,15 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { ArrowLeft, CalendarDays, ClipboardList, Edit3, HeartPulse, Package, Pill, QrCode, ShieldCheck, ShoppingBag, Watch } from "lucide-react";
-import { Badge, CareStatusDonut, HealthTimeline, WeightTrendChart } from "@/components";
+import { Badge, CareStatusDonut, DigitalTwinFlow, HealthTimeline, NextBestActions, PetCareReadinessCard, PetInsightsPanel, WeightTrendChart } from "@/components";
 import { PetFormModal } from "@/features/pet-form";
 import { usePetcare } from "@/features/petcare-store";
 import { formatDate, formatPetAge, WorkspaceShell } from "@/features/workspace-shell";
+import { buildPetContext, calculatePetCareReadiness, generatePetInsights, getNextBestActions } from "@/lib/pet-digital-twin";
 
 export default function PetProfilePage() {
   const { id } = useParams<{ id: string }>();
-  const { pets, records, vaccinations, medications, weights, reminders, appointments, orders, bands, updatePet } = usePetcare();
+  const { pets, records, vaccinations, medications, weights, reminders, appointments, orders, bookings, providers, vets, bands, bandMetrics, habits, bandAlerts, locationPoints, products, updatePet } = usePetcare();
   const [editing, setEditing] = useState(false);
   const pet = pets.find((item) => item.id === id);
 
@@ -26,6 +27,10 @@ export default function PetProfilePage() {
   const petReminders = reminders.filter((item) => item.petId === pet.id && item.status !== "DONE").sort((left, right) => `${left.date}${left.time}`.localeCompare(`${right.date}${right.time}`));
   const petAppointments = appointments.filter((item) => item.petId === pet.id);
   const petBand = bands.find((item) => item.petId === pet.id);
+  const petContext = buildPetContext({ pet, records, vaccinations, medications, weights, reminders, appointments, orders, bookings, providers, vets, bands, bandMetrics, habits, bandAlerts, locationPoints, products });
+  const petInsights = generatePetInsights(petContext);
+  const careReadiness = calculatePetCareReadiness(petContext);
+  const nextActions = getNextBestActions(petInsights, 3);
   const latestWeight = petWeights.at(-1)?.weight ?? pet.weight;
   const trend = petWeights.length > 1 ? latestWeight > petWeights[0].weight ? "Increasing" : latestWeight < petWeights[0].weight ? "Decreasing" : "Stable" : "No trend yet";
   const timeline = [
@@ -43,6 +48,15 @@ export default function PetProfilePage() {
       <div className="space-y-6">
         <Link href="/pets" className="btn-ghost -ml-2"><ArrowLeft size={16} /> All pets</Link>
         <section className="overflow-hidden rounded-3xl bg-ink text-white shadow-lift"><div className="grid gap-6 p-6 sm:p-8 lg:grid-cols-[auto_1fr_auto] lg:items-center"><img className="h-28 w-28 rounded-3xl object-cover ring-4 ring-white/15" src={pet.image} alt={pet.name} /><div><div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-black tracking-[-.04em]">{pet.name}</h1><Badge tone={pet.vaccinationStatus === "Up to date" ? "green" : "orange"}>{pet.vaccinationStatus}</Badge></div><p className="mt-2 text-slate-300">{pet.breed} · {pet.gender} · {formatPetAge(pet.birthDate)} · {pet.color}</p><div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm"><span><strong className="text-[#a7ded2]">Weight</strong> {latestWeight} kg</span><span><strong className="text-[#a7ded2]">Activity</strong> {pet.activityLevel}</span>{pet.microchipId ? <span><strong className="text-[#a7ded2]">Microchip</strong> {pet.microchipId}</span> : null}</div></div><div className="rounded-2xl bg-white/10 p-4"><p className="text-xs font-bold text-white/65">NEXT CARE</p><p className="mt-2 font-bold">{petReminders[0]?.title ?? "Nothing due soon"}</p><p className="mt-1 text-sm text-[#a7ded2]">{petReminders[0] ? formatDate(petReminders[0].date) : "You’re all caught up"}</p></div></div></section>
+
+        <DigitalTwinFlow petName={pet.name} />
+
+        <section className="grid gap-6 xl:grid-cols-[1.08fr_.92fr]">
+          <PetCareReadinessCard readiness={careReadiness} />
+          <NextBestActions actions={nextActions} title={`${pet.name}’s next actions`} />
+        </section>
+
+        <PetInsightsPanel insights={petInsights} limit={3} />
 
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">{[
           { icon: ShieldCheck, label: "Vaccinations", value: `${petVaccinations.length} logged`, href: "/health" },

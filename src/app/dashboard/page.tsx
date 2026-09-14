@@ -1,27 +1,48 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Bot, CalendarPlus, CheckCircle2, ClipboardPlus, HeartPulse, PawPrint, QrCode, ShieldAlert, ShoppingBag, Sparkles, Stethoscope, Watch } from "lucide-react";
-import { AppointmentCard, DashboardCard, HealthTimeline, PetCard, ProductCard, ReminderCard, SectionHeading } from "@/components";
+import { AppointmentCard, DashboardCard, DigitalTwinFlow, HealthTimeline, NextBestActions, PetCareReadinessCard, PetCard, PetInsightsPanel, ProductCard, ReminderCard, SectionHeading } from "@/components";
 import { usePetcare } from "@/features/petcare-store";
 import { formatPetAge, WorkspaceShell } from "@/features/workspace-shell";
+import { buildPetContext, calculatePetCareReadiness, generatePetInsights, getNextBestActions, getPetProductRecommendations } from "@/lib/pet-digital-twin";
 
 export default function DashboardPage() {
-  const { user, pets, records, reminders, appointments, vets, products, bands, bandAlerts, addToCart } = usePetcare();
-  const primaryPet = pets[0];
+  const { user, pets, records, vaccinations, medications, weights, reminders, appointments, orders, bookings, vets, providers, products, bands, bandMetrics, habits, bandAlerts, locationPoints, addToCart } = usePetcare();
+  const [activePetId, setActivePetId] = useState("");
+  useEffect(() => {
+    if (!pets.some((pet) => pet.id === activePetId)) setActivePetId(pets[0]?.id ?? "");
+  }, [activePetId, pets]);
+  const primaryPet = pets.find((pet) => pet.id === activePetId) ?? pets[0];
+  const petContext = useMemo(() => primaryPet ? buildPetContext({
+    pet: primaryPet, records, vaccinations, medications, weights, reminders, appointments, orders, bookings, providers, vets, bands, bandMetrics, habits, bandAlerts, locationPoints, products,
+  }) : undefined, [primaryPet, records, vaccinations, medications, weights, reminders, appointments, orders, bookings, providers, vets, bands, bandMetrics, habits, bandAlerts, locationPoints, products]);
+  const petInsights = useMemo(() => petContext ? generatePetInsights(petContext) : [], [petContext]);
+  const careReadiness = useMemo(() => petContext ? calculatePetCareReadiness(petContext) : undefined, [petContext]);
+  const nextActions = useMemo(() => getNextBestActions(petInsights, 3), [petInsights]);
   const pending = reminders.filter((item) => item.status !== "DONE").sort((left, right) => `${left.date}${left.time}`.localeCompare(`${right.date}${right.time}`));
   const upcoming = appointments.filter((item) => item.status === "PENDING" || item.status === "CONFIRMED").sort((left, right) => `${left.date}${left.time}`.localeCompare(`${right.date}${right.time}`));
   const events = [
     ...records.map((record) => ({ id: `record-${record.id}`, date: record.date, title: record.reason, description: record.diagnosis, type: record.type === "Consultation" ? "visit" as const : "record" as const, meta: `${record.veterinarian} · ${record.clinic}` })),
     ...pending.slice(0, 2).map((reminder) => ({ id: `reminder-${reminder.id}`, date: reminder.date, title: reminder.title, description: reminder.description, type: "reminder" as const })),
   ].sort((left, right) => right.date.localeCompare(left.date)).slice(0, 5);
-  const recommended = products.filter((product) => !primaryPet || product.species.includes(primaryPet.species)).slice(0, 3);
+  const recommended = useMemo(() => petContext
+    ? getPetProductRecommendations(petContext, products).map(({ product, reason }) => ({ ...product, reason }))
+    : products.slice(0, 3), [petContext, products]);
   const firstName = user.name.trim().split(/\s+/)[0] || "there";
 
   return (
     <WorkspaceShell title="Dashboard" subtitle="A calm, connected view of every care detail." actions={<Link href={pets.length ? "/pets" : "/onboarding"} className="hidden btn-primary sm:inline-flex"><PawPrint size={16} /> {pets.length ? "Add pet" : "Create pet passport"}</Link>}>
       <div className="space-y-7">
         <section className="overflow-hidden rounded-3xl bg-ink p-6 text-white shadow-lift sm:p-8"><div className="relative"><div className="pointer-events-none absolute -right-24 -top-32 h-72 w-72 rounded-full bg-moss/60 blur-3xl" /><div className="relative flex flex-col justify-between gap-7 lg:flex-row lg:items-end"><div><p className="text-sm font-bold text-[#a7ded2]">PETCARE HUB · TODAY</p><h1 className="mt-2 text-3xl font-black tracking-[-.04em] sm:text-4xl">Good evening, {firstName}.</h1><p className="mt-3 max-w-xl leading-7 text-slate-300">{primaryPet ? `Everything for ${primaryPet.name} and your other companions is connected here: their passport, care plan and next useful task.` : "Create your first pet passport to connect health history, wearable context, care plans and trusted services in one place."}</p></div><div className="flex flex-wrap gap-2"><Link href="/passport" className="btn-secondary border-white/10 bg-white/10 text-white hover:bg-white hover:text-ink"><QrCode size={16} /> Open passport</Link><Link href="/ai-assistant" className="btn-secondary border-white/10 bg-white/10 text-white hover:bg-white hover:text-ink"><Bot size={16} /> Ask PetCare AI</Link></div></div></div></section>
+
+        {primaryPet && petContext && careReadiness ? <>
+          <section className="surface flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="eyebrow"><Sparkles size={14} /> Pet-centred workspace</p><p className="mt-1 text-sm text-slate-600">Choose the pet whose digital twin drives this dashboard.</p></div><label className="min-w-[12rem]"><span className="sr-only">Active pet</span><select className="field" value={primaryPet.id} onChange={(event) => setActivePetId(event.target.value)}>{pets.map((pet) => <option value={pet.id} key={pet.id}>{pet.name} · {pet.species}</option>)}</select></label></section>
+          <DigitalTwinFlow petName={primaryPet.name} />
+          <section className="grid gap-6 xl:grid-cols-[1.08fr_.92fr]"><PetCareReadinessCard readiness={careReadiness} /><NextBestActions actions={nextActions} /></section>
+          <PetInsightsPanel insights={petInsights} limit={2} />
+        </> : null}
 
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5"><DashboardCard label="Your pets" value={pets.length} description="Profiles in your care" icon={PawPrint} accent="teal" /><DashboardCard label="Care reminders" value={pending.length} description="A few small things ahead" icon={HeartPulse} accent="orange" /><DashboardCard label="Upcoming visits" value={upcoming.length} description="Vet care already planned" icon={CalendarPlus} accent="sky" /><DashboardCard label="Health activity" value={records.length} description="Records in your timeline" icon={ClipboardPlus} accent="violet" /><DashboardCard label="Band insights" value={bandAlerts.filter((alert) => alert.status === "OPEN").length} description={bands.some((band) => band.status === "CONNECTED") ? "Wearable trends to review" : "Connect a tracker"} icon={Watch} accent="teal" /></section>
 

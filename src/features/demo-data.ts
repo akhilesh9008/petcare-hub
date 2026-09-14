@@ -47,7 +47,19 @@ export interface CartItem { productId: string; quantity: number; }
 export interface Order { id: string; number: string; date: string; items: CartItem[]; total: number; status: OrderStatus; address: string; petId?: string; }
 export interface ServiceProvider { id: string; name: string; businessName: string; category: string; location: string; rating: number; reviews: number; price: number; image: string; description: string; availability: string[]; }
 export interface ServiceBooking { id: string; petId: string; providerId: string; date: string; time: string; notes: string; status: AppointmentStatus; }
-export interface ChatMessage { id: string; role: "user" | "assistant"; text: string; timestamp: string; }
+/** Links are shown with AI responses so owners can verify the underlying record. */
+export interface ChatMessageSource { id: string; label: string; href: string; }
+export interface ChatMessage { id: string; role: "user" | "assistant"; text: string; timestamp: string; sources?: ChatMessageSource[]; }
+
+/** Local UI state for an owner decision; it never alters the underlying care record. */
+export interface PetInsightState {
+  id: string;
+  petId: string;
+  insightId: string;
+  status: "DISMISSED" | "SNOOZED";
+  until?: string;
+  updatedAt: string;
+}
 
 // Wearable data is deliberately presented as wellbeing context, never as a diagnosis.
 export type BandConnectionStatus = "CONNECTED" | "SYNCING" | "DISCONNECTED";

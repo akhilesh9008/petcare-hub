@@ -2,8 +2,9 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import {
-  BandAlert, BandDailyMetric, ChatMessage, demoUser, HealthBand, HealthRecord, HabitKind, HabitSource, initialAppointments, initialBandAlerts, initialBandMetrics, initialBands, initialBookings, initialHabits, initialMedications, initialOrders, initialPets, initialProducts, initialProviders, initialRecords, initialReminders, initialVaccinations, initialVets, initialWeights, Medication, Order, Pet, PetHabit, PetLocationPoint, Reminder, Role, ServiceBooking, Vaccination, WeightRecord, Appointment, CartItem, Product,
+  BandAlert, BandDailyMetric, ChatMessage, demoUser, HealthBand, HealthRecord, HabitKind, HabitSource, initialAppointments, initialBandAlerts, initialBandMetrics, initialBands, initialBookings, initialHabits, initialMedications, initialOrders, initialPets, initialProducts, initialProviders, initialRecords, initialReminders, initialVaccinations, initialVets, initialWeights, Medication, Order, Pet, PetHabit, PetInsightState, PetLocationPoint, Reminder, Role, ServiceBooking, Vaccination, WeightRecord, Appointment, CartItem, Product,
 } from "@/features/demo-data";
+import { buildPetAssistantResponse, buildPetContext } from "@/lib/pet-digital-twin";
 
 export interface PetcareState {
   pets: Pet[];
@@ -23,6 +24,7 @@ export interface PetcareState {
   habits: PetHabit[];
   bandAlerts: BandAlert[];
   locationPoints: PetLocationPoint[];
+  insightStates: PetInsightState[];
 }
 
 export interface WorkspaceUser {
@@ -75,6 +77,8 @@ interface Store extends PetcareState {
   markBandAlertRead: (id: string) => void;
   addLocationPoint: (point: Omit<PetLocationPoint, "id">) => void;
   clearLocationPoints: (petId: string) => void;
+  dismissInsight: (petId: string, insightId: string) => void;
+  snoozeInsight: (petId: string, insightId: string, until?: string) => void;
   sendMessage: (petId: string, text: string) => void;
   clearConversation: (petId: string) => void;
 }
@@ -101,12 +105,13 @@ const initialState: PetcareState = {
   habits: initialHabits,
   bandAlerts: initialBandAlerts,
   locationPoints: [],
+  insightStates: [],
 };
 
 function createEmptyState(): PetcareState {
   return {
     pets: [], records: [], vaccinations: [], medications: [], weights: [], reminders: [], appointments: [],
-    products: initialProducts, cart: [], orders: [], bookings: [], conversations: {}, bands: [], bandMetrics: [], habits: [], bandAlerts: [], locationPoints: [],
+    products: initialProducts, cart: [], orders: [], bookings: [], conversations: {}, bands: [], bandMetrics: [], habits: [], bandAlerts: [], locationPoints: [], insightStates: [],
   };
 }
 
@@ -162,6 +167,7 @@ function restoreState(fallback: PetcareState, value: unknown): PetcareState {
     habits: Array.isArray(candidate.habits) ? candidate.habits : fallback.habits,
     bandAlerts: Array.isArray(candidate.bandAlerts) ? candidate.bandAlerts : fallback.bandAlerts,
     locationPoints: Array.isArray(candidate.locationPoints) ? candidate.locationPoints : fallback.locationPoints,
+    insightStates: Array.isArray(candidate.insightStates) ? candidate.insightStates : fallback.insightStates,
   };
 }
 
@@ -440,15 +446,44 @@ export function PetcareProvider({ children }: { children: React.ReactNode }) {
     return { ...previous, locationPoints: [...otherPoints, ...nextPoints] };
   }), []);
   const clearLocationPoints = useCallback((petId: string) => setState((previous) => ({ ...previous, locationPoints: previous.locationPoints.filter((point) => point.petId !== petId) })), []);
+  const dismissInsight = useCallback((petId: string, insightId: string) => setState((previous) => {
+    const next = { id: `insight-state:${petId}:${insightId}`, petId, insightId, status: "DISMISSED" as const, updatedAt: new Date().toISOString() };
+    return { ...previous, insightStates: [...previous.insightStates.filter((item) => !(item.petId === petId && item.insightId === insightId)), next] };
+  }), []);
+  const snoozeInsight = useCallback((petId: string, insightId: string, until?: string) => setState((previous) => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const next = { id: `insight-state:${petId}:${insightId}`, petId, insightId, status: "SNOOZED" as const, until: until ?? tomorrow.toISOString(), updatedAt: new Date().toISOString() };
+    return { ...previous, insightStates: [...previous.insightStates.filter((item) => !(item.petId === petId && item.insightId === insightId)), next] };
+  }), []);
   const sendMessage = useCallback((petId: string, text: string) => setState((previous) => {
     const pet = previous.pets.find((item) => item.id === petId);
     const userMessage: ChatMessage = { id: createId("msg"), role: "user", text, timestamp: new Date().toISOString() };
-    const response: ChatMessage = { id: createId("msg"), role: "assistant", text: assistantReply(text, pet, previous), timestamp: new Date().toISOString() };
+    const assistant = pet ? buildPetAssistantResponse(text, buildPetContext({
+      pet,
+      records: previous.records,
+      vaccinations: previous.vaccinations,
+      medications: previous.medications,
+      weights: previous.weights,
+      reminders: previous.reminders,
+      appointments: previous.appointments,
+      orders: previous.orders,
+      bookings: previous.bookings,
+      providers: initialProviders,
+      vets: initialVets,
+      bands: previous.bands,
+      bandMetrics: previous.bandMetrics,
+      habits: previous.habits,
+      bandAlerts: previous.bandAlerts,
+      locationPoints: previous.locationPoints,
+      products: previous.products,
+    })) : { text: "Select a pet profile first so I can safely use its recorded context.", sources: [] };
+    const response: ChatMessage = { id: createId("msg"), role: "assistant", text: assistant.text, sources: assistant.sources, timestamp: new Date().toISOString() };
     return { ...previous, conversations: { ...previous.conversations, [petId]: [...(previous.conversations[petId] ?? []), userMessage, response] } };
   }), []);
   const clearConversation = useCallback((petId: string) => setState((previous) => ({ ...previous, conversations: { ...previous.conversations, [petId]: [] } })), []);
 
-  const value = useMemo<Store>(() => ({ ...state, hydrated, user, vets: initialVets, providers: initialProviders, addPet, updatePet, addRecord, updateRecord, deleteRecord, addVaccination, updateVaccination, deleteVaccination, addMedication, updateMedication, deleteMedication, addWeight, deleteWeight, addReminder, toggleReminder, bookAppointment, updateAppointmentStatus, setConsultationNotes, addToCart, setCartQuantity, clearCart, checkout, bookService, updateServiceBookingStatus, updateOrderStatus, updateProduct, saveBluetoothBand, updateBluetoothBandReading, pairBand, syncBand, disconnectBand, addHabit, markBandAlertRead, addLocationPoint, clearLocationPoints, sendMessage, clearConversation }), [state, hydrated, user, addPet, updatePet, addRecord, updateRecord, deleteRecord, addVaccination, updateVaccination, deleteVaccination, addMedication, updateMedication, deleteMedication, addWeight, deleteWeight, addReminder, toggleReminder, bookAppointment, updateAppointmentStatus, setConsultationNotes, addToCart, setCartQuantity, clearCart, checkout, bookService, updateServiceBookingStatus, updateOrderStatus, updateProduct, saveBluetoothBand, updateBluetoothBandReading, pairBand, syncBand, disconnectBand, addHabit, markBandAlertRead, addLocationPoint, clearLocationPoints, sendMessage, clearConversation]);
+  const value = useMemo<Store>(() => ({ ...state, hydrated, user, vets: initialVets, providers: initialProviders, addPet, updatePet, addRecord, updateRecord, deleteRecord, addVaccination, updateVaccination, deleteVaccination, addMedication, updateMedication, deleteMedication, addWeight, deleteWeight, addReminder, toggleReminder, bookAppointment, updateAppointmentStatus, setConsultationNotes, addToCart, setCartQuantity, clearCart, checkout, bookService, updateServiceBookingStatus, updateOrderStatus, updateProduct, saveBluetoothBand, updateBluetoothBandReading, pairBand, syncBand, disconnectBand, addHabit, markBandAlertRead, addLocationPoint, clearLocationPoints, dismissInsight, snoozeInsight, sendMessage, clearConversation }), [state, hydrated, user, addPet, updatePet, addRecord, updateRecord, deleteRecord, addVaccination, updateVaccination, deleteVaccination, addMedication, updateMedication, deleteMedication, addWeight, deleteWeight, addReminder, toggleReminder, bookAppointment, updateAppointmentStatus, setConsultationNotes, addToCart, setCartQuantity, clearCart, checkout, bookService, updateServiceBookingStatus, updateOrderStatus, updateProduct, saveBluetoothBand, updateBluetoothBandReading, pairBand, syncBand, disconnectBand, addHabit, markBandAlertRead, addLocationPoint, clearLocationPoints, dismissInsight, snoozeInsight, sendMessage, clearConversation]);
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
 
