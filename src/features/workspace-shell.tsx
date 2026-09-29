@@ -3,7 +3,7 @@
 import { ReactNode, useMemo } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  Activity, Bot, CalendarDays, ClipboardList, HeartHandshake, HeartPulse, Home, Images, LayoutDashboard, MapPinned, Package, PawPrint, QrCode, Settings, ShieldAlert, ShoppingBag, Sparkles, Stethoscope, UserRound, UsersRound, Watch,
+  Activity, Bot, CalendarDays, ClipboardList, FileText, HeartHandshake, HeartPulse, Home, Images, LayoutDashboard, MapPinned, Package, PawPrint, QrCode, Settings, ShieldAlert, ShoppingBag, Sparkles, Stethoscope, UserRound, UsersRound, Watch,
 } from "lucide-react";
 import { AppShell, type NavigationItem } from "@/components";
 import { clearDemoSession } from "@/features/auth/session";
@@ -16,6 +16,7 @@ const ownerNavigation: NavigationItem[] = [
   { label: "Pet Insights", href: "/insights", icon: Sparkles },
   { label: "Digital passport", href: "/passport", icon: QrCode },
   { label: "Health", href: "/health", icon: HeartPulse },
+  { label: "Documents", href: "/documents", icon: FileText },
   { label: "Health Band", href: "/health-band", icon: Watch },
   { label: "Veterinarians", href: "/veterinarians", icon: Stethoscope },
   { label: "Appointments", href: "/appointments", icon: CalendarDays },
@@ -58,6 +59,7 @@ const navigationTranslationKeys: Record<string, string> = {
   "Pet Insights": "nav.insights",
   "Digital passport": "nav.passport",
   "Health": "nav.health",
+  "Documents": "nav.documents",
   "Health Band": "nav.healthBand",
   "Veterinarians": "nav.veterinarians",
   "Appointments": "nav.appointments",

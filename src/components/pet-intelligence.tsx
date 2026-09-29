@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
-import { Activity, ArrowRight, CalendarClock, CheckCircle2, CircleAlert, Clock3, HeartPulse, MapPin, Package, PawPrint, ShieldCheck, Sparkles, Stethoscope, X } from "lucide-react";
-import type { PetCareReadiness, PetInsight, PetLifeEvent, PetNextAction } from "@/lib/pet-digital-twin";
+import { Activity, ArrowRight, Brain, CalendarClock, CheckCircle2, CircleAlert, Clock3, FileText, HeartPulse, MapPin, Package, PawPrint, ShieldCheck, Sparkles, X } from "lucide-react";
+import type { PetCareReadiness, PetDataFreshness, PetInsight, PetLifeEvent, PetNextAction, PetVisitBrief, PetWeeklyBrief } from "@/lib/pet-digital-twin";
 import { Badge, Button, Card } from "./ui";
 import { cn, formatDate } from "./utils";
 
@@ -15,6 +15,8 @@ const eventIcons: Record<PetLifeEvent["category"], LucideIcon> = {
   LOCATION: MapPin,
   COMMERCE: Package,
   PLANNING: CalendarClock,
+  DOCUMENT: FileText,
+  INTELLIGENCE: Brain,
 };
 
 const eventStyles: Record<PetLifeEvent["category"], string> = {
@@ -25,6 +27,8 @@ const eventStyles: Record<PetLifeEvent["category"], string> = {
   LOCATION: "bg-orange-50 text-orange-700 ring-orange-100",
   COMMERCE: "bg-slate-100 text-slate-700 ring-slate-200",
   PLANNING: "bg-amber-50 text-amber-700 ring-amber-100",
+  DOCUMENT: "bg-indigo-50 text-indigo-700 ring-indigo-100",
+  INTELLIGENCE: "bg-fuchsia-50 text-fuchsia-700 ring-fuchsia-100",
 };
 
 const importanceTone: Record<PetInsight["importance"], "red" | "orange" | "teal"> = {
@@ -92,10 +96,11 @@ export function NextBestActions({ actions, title = "Next best actions", classNam
   );
 }
 
-export function PetInsightsPanel({ insights, onDismiss, onSnooze, limit, className }: {
+export function PetInsightsPanel({ insights, onDismiss, onSnooze, onRecordOutcome, limit, className }: {
   insights: PetInsight[];
   onDismiss?: (insight: PetInsight) => void;
   onSnooze?: (insight: PetInsight) => void;
+  onRecordOutcome?: (insight: PetInsight) => void;
   limit?: number;
   className?: string;
 }) {
@@ -114,9 +119,11 @@ export function PetInsightsPanel({ insights, onDismiss, onSnooze, limit, classNa
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-start justify-between gap-2"><h4 className="text-sm font-bold text-ink">{insight.title}</h4><Badge tone={importanceTone[insight.importance]}>{insight.importance.toLowerCase()}</Badge></div>
                 <p className="mt-1.5 text-sm leading-5 text-slate-600">{insight.summary}</p>
-                <p className="mt-2 text-xs leading-5 text-slate-500"><strong className="text-slate-600">Why it appeared:</strong> {insight.why}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500"><span><strong className="text-slate-600">Why it appeared:</strong> {insight.why}</span><span className="hidden h-1 w-1 rounded-full bg-slate-300 sm:inline-block" /><span>Confidence: {insight.confidence.toLowerCase()}</span><span className="hidden h-1 w-1 rounded-full bg-slate-300 sm:inline-block" /><span>{insight.timeSensitivity.replaceAll("_", " ").toLowerCase()}</span></div>
+                {insight.evidence.length ? <details className="mt-3 rounded-xl border border-slate-100 bg-white/80 px-3 py-2 text-xs text-slate-600"><summary className="cursor-pointer font-bold text-slate-700">Evidence used</summary><ul className="mt-2 space-y-1 leading-5">{insight.evidence.map((item) => <li className="flex gap-2" key={item}><span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-teal-500" />{item}</li>)}</ul></details> : null}
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <Link href={insight.action.href} className="btn-secondary h-8 px-3 text-xs">{insight.action.label}<ArrowRight size={14} /></Link>
+                  {onRecordOutcome ? <Button size="sm" variant="ghost" className="h-8 px-2.5 text-xs" onClick={() => onRecordOutcome(insight)}><CheckCircle2 size={14} /> Record outcome</Button> : null}
                   {onSnooze ? <Button size="sm" variant="ghost" className="h-8 px-2.5 text-xs" onClick={() => onSnooze(insight)}><Clock3 size={14} /> Snooze</Button> : null}
                   {onDismiss ? <Button size="sm" variant="ghost" className="h-8 px-2.5 text-xs" onClick={() => onDismiss(insight)}><X size={14} /> Dismiss</Button> : null}
                 </div>
@@ -128,6 +135,54 @@ export function PetInsightsPanel({ insights, onDismiss, onSnooze, limit, classNa
       </div>
     </Card>
   );
+}
+
+const freshnessTone: Record<PetDataFreshness["status"], { badge: "teal" | "orange" | "red" | "slate"; dot: string }> = {
+  CURRENT: { badge: "teal", dot: "bg-emerald-500" },
+  AGING: { badge: "orange", dot: "bg-amber-500" },
+  ATTENTION: { badge: "red", dot: "bg-rose-500" },
+  MISSING: { badge: "red", dot: "bg-rose-500" },
+  NOT_CONNECTED: { badge: "slate", dot: "bg-slate-400" },
+};
+
+export function PetFreshnessPanel({ items, className }: { items: PetDataFreshness[]; className?: string }) {
+  return (
+    <Card className={className}>
+      <div className="flex items-start gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-sky-50 text-sky-700"><Clock3 size={18} /></span><div><h3 className="font-black tracking-[-.02em] text-ink">Data freshness</h3><p className="mt-1 text-sm leading-5 text-slate-600">Shows what is current, aging, missing, or awaiting review—not a health assessment.</p></div></div>
+      <div className="mt-5 grid gap-2 sm:grid-cols-2">
+        {items.map((item) => {
+          const tone = freshnessTone[item.status];
+          const content = <><span className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", tone.dot)} /><span className="min-w-0 flex-1"><span className="flex flex-wrap items-center gap-2"><span className="text-sm font-bold text-ink">{item.label}</span><Badge tone={tone.badge}>{item.status.replaceAll("_", " ").toLowerCase()}</Badge></span><span className="mt-1 block text-xs leading-5 text-slate-500">{item.detail}</span></span></>;
+          return item.source ? <Link key={item.id} href={item.source.href} className="flex gap-2 rounded-xl border border-slate-100 bg-slate-50/70 p-3 transition hover:border-teal-100 hover:bg-teal-50">{content}</Link> : <div key={item.id} className="flex gap-2 rounded-xl border border-slate-100 bg-slate-50/70 p-3">{content}</div>;
+        })}
+      </div>
+    </Card>
+  );
+}
+
+export function PetWeeklyBriefCard({ brief, className }: { brief: PetWeeklyBrief; className?: string }) {
+  return (
+    <Card className={cn("overflow-hidden", className)}>
+      <div className="flex items-start gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-violet-50 text-violet-700"><Brain size={18} /></span><div><p className="eyebrow">Weekly brief</p><h3 className="mt-1 font-black tracking-[-.02em] text-ink">{brief.title}</h3><p className="mt-1 text-sm leading-5 text-slate-600">A factual recap of recorded activity, care, and next steps.</p></div></div>
+      <div className="mt-5 space-y-3 text-sm leading-6 text-slate-600"><p><strong className="text-ink">Activity:</strong> {brief.activity}</p><p><strong className="text-ink">Care:</strong> {brief.care}</p><p><strong className="text-ink">Upcoming:</strong> {brief.upcoming}</p></div>
+      {brief.needsAttention.length ? <div className="mt-4 rounded-xl bg-amber-50 p-3"><p className="text-xs font-bold uppercase tracking-[.12em] text-amber-800">Worth reviewing</p><ul className="mt-2 space-y-1.5 text-sm text-amber-950">{brief.needsAttention.map((item) => <li key={item} className="flex gap-2"><CircleAlert className="mt-0.5 shrink-0" size={14} />{item}</li>)}</ul></div> : null}
+    </Card>
+  );
+}
+
+export function PetVisitBriefCard({ brief, className, title = "Vet visit brief" }: { brief: PetVisitBrief; className?: string; title?: string }) {
+  return (
+    <Card className={className}>
+      <div className="flex items-start gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-rose-50 text-rose-700"><FileText size={18} /></span><div><p className="eyebrow">Share-ready summary</p><h3 className="mt-1 font-black tracking-[-.02em] text-ink">{title}</h3><p className="mt-1 text-sm text-slate-600">Reason: {brief.reason}</p></div></div>
+      <div className="mt-5 grid gap-4 sm:grid-cols-2"><VisitBriefList label="Recent changes" items={brief.recentChanges} /><VisitBriefList label="Relevant history" items={brief.relevantHistory} /><VisitBriefList label="Current medication" items={brief.currentMedication} /><VisitBriefList label="Owner observations" items={brief.ownerObservations} /></div>
+      <div className="mt-4 rounded-xl bg-slate-50 p-3"><p className="text-xs font-bold uppercase tracking-[.12em] text-slate-600">Questions to discuss</p><ul className="mt-2 space-y-1.5 text-sm leading-5 text-slate-600">{brief.questions.map((item) => <li key={item} className="flex gap-2"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-500" />{item}</li>)}</ul></div>
+      <p className="mt-4 text-xs leading-5 text-slate-500">{brief.disclaimer}</p>
+    </Card>
+  );
+}
+
+function VisitBriefList({ label, items }: { label: string; items: string[] }) {
+  return <div><p className="text-xs font-bold uppercase tracking-[.12em] text-slate-500">{label}</p><ul className="mt-2 space-y-1.5 text-sm leading-5 text-slate-600">{items.map((item) => <li key={item} className="flex gap-2"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" />{item}</li>)}</ul></div>;
 }
 
 export function PetLifeTimeline({ events, title = "Pet life timeline", description = "Health, care and daily life in one chronological view.", limit = 12, action, className }: {

@@ -52,7 +52,7 @@ function PassportMarker({ token }: { token: string }) {
 }
 
 export default function PassportPage() {
-  const { pets, records, vaccinations, medications, reminders, weights, user, hydrated } = usePetcare();
+  const { pets, records, vaccinations, medications, reminders, weights, documents, user, hydrated } = usePetcare();
   const search = useSearchParams();
   const [petId, setPetId] = useState("");
   const [notice, setNotice] = useState("");
@@ -72,6 +72,7 @@ export default function PassportPage() {
   const petRecords = records.filter((item) => item.petId === petId).sort((left, right) => right.date.localeCompare(left.date));
   const petVaccinations = vaccinations.filter((item) => item.petId === petId).sort((left, right) => right.administered.localeCompare(left.administered));
   const petMedications = medications.filter((item) => item.petId === petId).sort((left, right) => right.startDate.localeCompare(left.startDate));
+  const petDocuments = documents.filter((item) => item.petId === petId);
   const petReminders = reminders.filter((item) => item.petId === petId && item.status !== "DONE").sort((left, right) => `${left.date}${left.time}`.localeCompare(`${right.date}${right.time}`));
   const latestWeight = weights.filter((item) => item.petId === petId).sort((left, right) => right.date.localeCompare(left.date))[0];
 
@@ -82,7 +83,7 @@ export default function PassportPage() {
       if (navigator.share) await navigator.share(shareData);
       else if (navigator.clipboard) {
         await navigator.clipboard.writeText(url);
-        setNotice("Private passport link copied to your clipboard.");
+        setNotice("Local passport link copied to your clipboard.");
       }
     } catch {
       // Closing a native share dialog should not surface as an error.
@@ -92,7 +93,7 @@ export default function PassportPage() {
   async function copyLink() {
     if (!url || !navigator.clipboard) return;
     await navigator.clipboard.writeText(url);
-    setNotice("Private passport link copied to your clipboard.");
+    setNotice("Local passport link copied to your clipboard.");
   }
 
   if (!hydrated) {
@@ -112,7 +113,7 @@ export default function PassportPage() {
             <div>
               <span className="eyebrow bg-white/10 text-[#a7ded2]"><ShieldCheck size={14} /> Private health passport</span>
               <div className="mt-5 flex flex-wrap items-center gap-4"><img src={pet.image} alt={pet.name} className="h-20 w-20 rounded-3xl object-cover ring-4 ring-white/15" /><div><h1 className="text-3xl font-black tracking-[-.04em]">{pet.name}</h1><p className="mt-1 text-slate-300">{pet.breed} · {pet.species} · {formatPetAge(pet.birthDate)}</p><p className="mt-2 text-sm text-[#a7ded2]">Passport owner: {user.name}</p></div></div>
-              <div className="mt-6 flex flex-wrap gap-3"><button type="button" className="btn-secondary" onClick={sharePassport}><Share2 size={16} /> Share securely</button><button type="button" className="btn-secondary" onClick={copyLink}><Copy size={16} /> Copy link</button><button type="button" className="btn-secondary" onClick={() => window.print()}><Printer size={16} /> Print card</button></div>
+              <div className="mt-6 flex flex-wrap gap-3"><button type="button" className="btn-secondary" onClick={sharePassport}><Share2 size={16} /> Share local link</button><button type="button" className="btn-secondary" onClick={copyLink}><Copy size={16} /> Copy link</button><button type="button" className="btn-secondary" onClick={() => window.print()}><Printer size={16} /> Print card</button></div>
             </div>
             <div className="flex justify-center"><PassportMarker token={token} /></div>
           </div>
@@ -120,11 +121,12 @@ export default function PassportPage() {
 
         {pets.length > 1 ? <section className="surface p-5"><label className="field-label" htmlFor="passport-pet">Passport for</label><select className="field mt-2 max-w-md" id="passport-pet" value={petId} onChange={(event) => setPetId(event.target.value)}>{pets.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.species}</option>)}</select></section> : null}
 
-        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <article className="surface p-5"><Syringe className="text-moss" size={20} /><p className="mt-4 text-sm font-bold text-slate-500">Vaccinations</p><p className="mt-1 text-2xl font-black text-ink">{petVaccinations.length}</p><p className="mt-1 text-sm text-slate-600">recorded on passport</p></article>
           <article className="surface p-5"><Pill className="text-moss" size={20} /><p className="mt-4 text-sm font-bold text-slate-500">Medication</p><p className="mt-1 text-2xl font-black text-ink">{petMedications.length}</p><p className="mt-1 text-sm text-slate-600">history entries</p></article>
           <article className="surface p-5"><CalendarDays className="text-moss" size={20} /><p className="mt-4 text-sm font-bold text-slate-500">Next care</p><p className="mt-1 truncate text-lg font-black text-ink">{petReminders[0]?.title ?? "All caught up"}</p><p className="mt-1 text-sm text-slate-600">{petReminders[0] ? formatDate(petReminders[0].date) : "No open task"}</p></article>
           <article className="surface p-5"><CheckCircle2 className="text-moss" size={20} /><p className="mt-4 text-sm font-bold text-slate-500">Latest weight</p><p className="mt-1 text-2xl font-black text-ink">{latestWeight?.weight ?? pet.weight} kg</p><p className="mt-1 text-sm text-slate-600">{latestWeight ? formatDate(latestWeight.date) : "Profile value"}</p></article>
+          <article className="surface p-5"><FileText className="text-moss" size={20} /><p className="mt-4 text-sm font-bold text-slate-500">Documents</p><p className="mt-1 text-2xl font-black text-ink">{petDocuments.length}</p><p className="mt-1 text-sm text-slate-600">{petDocuments.filter((item) => item.status === "PENDING_REVIEW").length ? "awaiting review" : "reviewed metadata"}</p></article>
         </section>
 
         <section className="grid gap-6 xl:grid-cols-[1.15fr_.85fr]">

@@ -61,6 +61,59 @@ export interface PetInsightState {
   updatedAt: string;
 }
 
+/** Structured, provenance-aware memory for observations and preferences not already canonical pet fields. */
+export type PetMemoryKind = "FACT" | "USER_PREFERENCE" | "VET_REPORTED" | "SYSTEM_OBSERVATION" | "WEARABLE_OBSERVATION" | "AI_HYPOTHESIS";
+export type PetMemoryStatus = "UNVERIFIED" | "VERIFIED" | "SUPERSEDED";
+export interface PetMemory {
+  id: string;
+  petId: string;
+  kind: PetMemoryKind;
+  label: string;
+  value: string;
+  source: "OWNER" | "VETERINARIAN" | "WEARABLE" | "SYSTEM" | "AI";
+  confidence: "HIGH" | "MEDIUM" | "LOW";
+  status: PetMemoryStatus;
+  recordedAt: string;
+  lastVerifiedAt?: string;
+  verifiedBy?: string;
+}
+
+/** Metadata and human-reviewed extraction proposals only. Raw files need secure object storage in production. */
+export type PetDocumentCategory = "VACCINATION_CERTIFICATE" | "PRESCRIPTION" | "LAB_REPORT" | "VET_RECORD" | "INVOICE" | "PHOTO" | "OTHER";
+export type PetDocumentStatus = "PENDING_REVIEW" | "VERIFIED" | "REJECTED";
+export interface PetDocumentField {
+  id: string;
+  label: string;
+  value: string;
+  confidence: "HIGH" | "MEDIUM" | "LOW";
+  status: "PENDING_REVIEW" | "VERIFIED";
+}
+export interface PetDocument {
+  id: string;
+  petId: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  category: PetDocumentCategory;
+  status: PetDocumentStatus;
+  source: "OWNER_UPLOAD" | "VETERINARIAN" | "SYSTEM";
+  importedAt: string;
+  verifiedAt?: string;
+  extractedFields: PetDocumentField[];
+}
+
+/** Captures what happened after a recommendation without mutating its original evidence. */
+export interface PetInsightOutcome {
+  id: string;
+  petId: string;
+  insightId?: string;
+  actionId?: string;
+  actionLabel: string;
+  status: "COMPLETED" | "FOLLOW_UP_NEEDED" | "NOT_RELEVANT";
+  note?: string;
+  recordedAt: string;
+}
+
 // Wearable data is deliberately presented as wellbeing context, never as a diagnosis.
 export type BandConnectionStatus = "CONNECTED" | "SYNCING" | "DISCONNECTED";
 export type HabitKind = "WALK" | "MEAL" | "WATER" | "PLAY" | "REST" | "POTTY" | "MEDICATION";
@@ -269,4 +322,18 @@ export const initialBandAlerts: BandAlert[] = [
   { id: "band-alert-1", petId: "bruno", priority: "ATTENTION", title: "A quieter two-day pattern", description: "Bruno's tracked activity has been below his recent personal pattern for two days. It is a trend to notice, not a diagnosis.", createdAt: "2026-08-25T20:00:00.000Z", status: "OPEN" },
   { id: "band-alert-2", petId: "bruno", priority: "INFO", title: "Back near usual overnight rest", description: "Last night's tracked rest is closer to Bruno's recent pattern.", createdAt: "2026-08-26T07:30:00.000Z", status: "OPEN" },
   { id: "band-alert-3", petId: "miso", priority: "INFO", title: "Band needs a charge", description: "Miso's band battery is below 50%. Charge it before the next sync to maintain habit history.", createdAt: "2026-08-24T19:10:00.000Z", status: "READ" },
+];
+
+export const initialPetMemories: PetMemory[] = [
+  { id: "memory-bruno-1", petId: "bruno", kind: "USER_PREFERENCE", label: "Food routine", value: "Chicken-free food is preferred because chicken is listed as an allergy.", source: "OWNER", confidence: "HIGH", status: "VERIFIED", recordedAt: "2026-06-20T09:00:00.000Z", lastVerifiedAt: "2026-08-12T10:00:00.000Z", verifiedBy: "Akhilesh Sharma" },
+  { id: "memory-bruno-2", petId: "bruno", kind: "WEARABLE_OBSERVATION", label: "Activity context", value: "A quieter two-day activity pattern was observed by the connected tracker; it is not a diagnosis.", source: "WEARABLE", confidence: "MEDIUM", status: "UNVERIFIED", recordedAt: "2026-08-25T20:00:00.000Z" },
+  { id: "memory-miso-1", petId: "miso", kind: "VET_REPORTED", label: "Routine note", value: "Increase hydration and consider a hairball-friendly food routine if it remains appropriate for the pet.", source: "VETERINARIAN", confidence: "HIGH", status: "VERIFIED", recordedAt: "2026-07-21T11:00:00.000Z", lastVerifiedAt: "2026-07-21T11:00:00.000Z", verifiedBy: "Dr. Rohan Iyer" },
+];
+
+export const initialPetDocuments: PetDocument[] = [
+  { id: "document-bruno-rabies", petId: "bruno", fileName: "bruno-rabies-certificate.pdf", mimeType: "application/pdf", sizeBytes: 248_000, category: "VACCINATION_CERTIFICATE", status: "VERIFIED", source: "OWNER_UPLOAD", importedAt: "2025-09-15T14:10:00.000Z", verifiedAt: "2025-09-15T14:12:00.000Z", extractedFields: [{ id: "document-bruno-rabies-vaccine", label: "Vaccine", value: "Rabies", confidence: "HIGH", status: "VERIFIED" }, { id: "document-bruno-rabies-due", label: "Next due", value: "2026-09-15", confidence: "HIGH", status: "VERIFIED" }] },
+];
+
+export const initialInsightOutcomes: PetInsightOutcome[] = [
+  { id: "outcome-bruno-1", petId: "bruno", actionId: "review-band:band-alert-2", actionLabel: "Reviewed overnight rest trend", status: "COMPLETED", note: "The next recorded rest summary returned closer to Bruno's usual pattern.", recordedAt: "2026-08-26T08:00:00.000Z" },
 ];

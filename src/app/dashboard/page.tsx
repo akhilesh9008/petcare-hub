@@ -9,15 +9,15 @@ import { formatPetAge, WorkspaceShell } from "@/features/workspace-shell";
 import { buildPetContext, calculatePetCareReadiness, generatePetInsights, getNextBestActions, getPetProductRecommendations } from "@/lib/pet-digital-twin";
 
 export default function DashboardPage() {
-  const { user, pets, records, vaccinations, medications, weights, reminders, appointments, orders, bookings, vets, providers, products, bands, bandMetrics, habits, bandAlerts, locationPoints, addToCart } = usePetcare();
+  const { user, pets, records, vaccinations, medications, weights, reminders, appointments, orders, bookings, vets, providers, products, bands, bandMetrics, habits, bandAlerts, locationPoints, memories, documents, insightOutcomes, addToCart } = usePetcare();
   const [activePetId, setActivePetId] = useState("");
   useEffect(() => {
     if (!pets.some((pet) => pet.id === activePetId)) setActivePetId(pets[0]?.id ?? "");
   }, [activePetId, pets]);
   const primaryPet = pets.find((pet) => pet.id === activePetId) ?? pets[0];
   const petContext = useMemo(() => primaryPet ? buildPetContext({
-    pet: primaryPet, records, vaccinations, medications, weights, reminders, appointments, orders, bookings, providers, vets, bands, bandMetrics, habits, bandAlerts, locationPoints, products,
-  }) : undefined, [primaryPet, records, vaccinations, medications, weights, reminders, appointments, orders, bookings, providers, vets, bands, bandMetrics, habits, bandAlerts, locationPoints, products]);
+    pet: primaryPet, records, vaccinations, medications, weights, reminders, appointments, orders, bookings, providers, vets, bands, bandMetrics, habits, bandAlerts, locationPoints, memories, documents, insightOutcomes, products,
+  }) : undefined, [primaryPet, records, vaccinations, medications, weights, reminders, appointments, orders, bookings, providers, vets, bands, bandMetrics, habits, bandAlerts, locationPoints, memories, documents, insightOutcomes, products]);
   const petInsights = useMemo(() => petContext ? generatePetInsights(petContext) : [], [petContext]);
   const careReadiness = useMemo(() => petContext ? calculatePetCareReadiness(petContext) : undefined, [petContext]);
   const nextActions = useMemo(() => getNextBestActions(petInsights, 3), [petInsights]);

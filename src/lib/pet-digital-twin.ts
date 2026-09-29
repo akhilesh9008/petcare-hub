@@ -7,8 +7,11 @@ import type {
   Medication,
   Order,
   Pet,
+  PetDocument,
   PetHabit,
+  PetInsightOutcome,
   PetLocationPoint,
+  PetMemory,
   Product,
   Reminder,
   ServiceBooking,
@@ -40,18 +43,21 @@ export interface PetContextInput {
   habits: PetHabit[];
   bandAlerts: BandAlert[];
   locationPoints: PetLocationPoint[];
+  memories?: PetMemory[];
+  documents?: PetDocument[];
+  insightOutcomes?: PetInsightOutcome[];
   products?: Product[];
   now?: Date;
 }
 
-export type PetEventCategory = "HEALTH" | "CARE" | "LIFE" | "ACTIVITY" | "LOCATION" | "COMMERCE" | "PLANNING";
-export type PetEventSource = "OWNER" | "VETERINARIAN" | "SERVICE_PROVIDER" | "WEARABLE" | "SYSTEM";
+export type PetEventCategory = "HEALTH" | "CARE" | "LIFE" | "ACTIVITY" | "LOCATION" | "COMMERCE" | "PLANNING" | "DOCUMENT" | "INTELLIGENCE";
+export type PetEventSource = "OWNER" | "VETERINARIAN" | "SERVICE_PROVIDER" | "WEARABLE" | "SYSTEM" | "AI";
 
 export interface PetSourceReference {
   id: string;
   label: string;
   href: string;
-  sourceType: "record" | "vaccination" | "medication" | "weight" | "reminder" | "appointment" | "wearable" | "location" | "order" | "service" | "pet";
+  sourceType: "record" | "vaccination" | "medication" | "weight" | "reminder" | "appointment" | "wearable" | "location" | "order" | "service" | "pet" | "document" | "memory" | "outcome";
 }
 
 /** A safe, minimal event projection. It keeps sensitive raw content in its source record. */
@@ -86,16 +92,21 @@ export interface PetNextAction {
 export interface PetInsight {
   id: string;
   petId: string;
-  type: "VACCINATION_DUE" | "CARE_OVERDUE" | "UPCOMING_APPOINTMENT" | "FOLLOW_UP" | "WEIGHT_TREND" | "WEIGHT_GAP" | "WEARABLE_PATTERN" | "SERVICE_BOOKING" | "CARE_PLAN";
+  type: "VACCINATION_DUE" | "CARE_OVERDUE" | "UPCOMING_APPOINTMENT" | "FOLLOW_UP" | "WEIGHT_TREND" | "WEIGHT_GAP" | "WEARABLE_PATTERN" | "SERVICE_BOOKING" | "DOCUMENT_REVIEW" | "CARE_PLAN";
   title: string;
   summary: string;
   why: string;
+  evidence: string[];
   importance: "HIGH" | "MEDIUM" | "LOW";
   confidence: "HIGH" | "MEDIUM";
+  timeSensitivity: "NOW" | "TODAY" | "THIS_WEEK" | "WHEN_PRACTICAL";
+  status: "ACTIVE" | "SNOOZED" | "DISMISSED" | "ACTION_RECORDED";
   action: PetNextAction;
   sources: PetSourceReference[];
   createdAt: string;
 }
+
+type PetInsightDraft = Omit<PetInsight, "evidence" | "timeSensitivity" | "status">;
 
 export interface PetCareTask {
   id: string;
@@ -152,6 +163,11 @@ export interface PetContext {
     orders: Order[];
     products: Product[];
   };
+  knowledge: {
+    memories: PetMemory[];
+    documents: PetDocument[];
+    outcomes: PetInsightOutcome[];
+  };
   events: PetLifeEvent[];
 }
 
@@ -176,10 +192,10 @@ function daysUntil(value: string, now: Date) {
   return Math.round((target - today) / dayMilliseconds);
 }
 
-function sortNewest<T extends { date?: string; timestamp?: string; createdAt?: string; startDate?: string; administered?: string }>(values: T[]) {
+function sortNewest<T extends { date?: string; timestamp?: string; createdAt?: string; recordedAt?: string; importedAt?: string; startDate?: string; administered?: string }>(values: T[]) {
   return [...values].sort((left, right) => {
-    const leftDate = left.date ?? left.timestamp ?? left.createdAt ?? left.startDate ?? left.administered ?? "";
-    const rightDate = right.date ?? right.timestamp ?? right.createdAt ?? right.startDate ?? right.administered ?? "";
+    const leftDate = left.date ?? left.timestamp ?? left.createdAt ?? left.recordedAt ?? left.importedAt ?? left.startDate ?? left.administered ?? "";
+    const rightDate = right.date ?? right.timestamp ?? right.createdAt ?? right.recordedAt ?? right.importedAt ?? right.startDate ?? right.administered ?? "";
     return rightDate.localeCompare(leftDate);
   });
 }
@@ -232,6 +248,18 @@ function orderSource(order: Order): PetSourceReference {
   return { id: `order:${order.id}`, label: "Purchase history", href: "/orders", sourceType: "order" };
 }
 
+function documentSource(document: PetDocument): PetSourceReference {
+  return { id: `document:${document.id}`, label: "Document review", href: "/documents", sourceType: "document" };
+}
+
+function memorySource(memory: PetMemory): PetSourceReference {
+  return { id: `memory:${memory.id}`, label: "Pet memory", href: `/insights?pet=${encodeURIComponent(memory.petId)}`, sourceType: "memory" };
+}
+
+function outcomeSource(outcome: PetInsightOutcome): PetSourceReference {
+  return { id: `outcome:${outcome.id}`, label: "Action outcome", href: `/insights?pet=${encodeURIComponent(outcome.petId)}`, sourceType: "outcome" };
+}
+
 function uniqueSources(sources: PetSourceReference[]) {
   return Array.from(new Map(sources.map((source) => [source.id, source])).values());
 }
@@ -270,6 +298,9 @@ export function buildPetContext(input: PetContextInput): PetContext {
   const orders = sortNewest(input.orders.filter((item) => item.petId === pet.id));
   const wearable = input.bands.find((item) => item.petId === pet.id);
   const activeMedication = medications.filter((item) => !item.endDate || item.endDate >= isoDate(now));
+  const memories = sortNewest((input.memories ?? []).filter((item) => item.petId === pet.id));
+  const documents = sortNewest((input.documents ?? []).filter((item) => item.petId === pet.id).map((item) => ({ ...item, createdAt: item.importedAt })));
+  const outcomes = sortNewest((input.insightOutcomes ?? []).filter((item) => item.petId === pet.id).map((item) => ({ ...item, createdAt: item.recordedAt })));
 
   const context: PetContext = {
     pet,
@@ -291,6 +322,7 @@ export function buildPetContext(input: PetContextInput): PetContext {
     routine: { habits, latestMetric: metrics.at(-1) },
     technology: { wearable, metrics, alerts, locationPoints, latestLocation: locationPoints.at(-1) },
     commerce: { orders, products: input.products ?? [] },
+    knowledge: { memories, documents, outcomes },
     events: [],
   };
   context.events = buildPetLifeEvents(context, input.providers, input.vets);
@@ -346,6 +378,18 @@ export function buildPetLifeEvents(context: PetContext, providers: ServiceProvid
       id: `order:${order.id}`, petId: context.pet.id, occurredAt: order.date, category: "COMMERCE" as const, eventType: "PRODUCT_PURCHASED",
       title: `Order ${order.number}`, description: `${order.items.length} item${order.items.length === 1 ? "" : "s"} linked to ${context.pet.name}`, source: "OWNER" as const, href: "/orders", sourceReference: orderSource(order),
     })),
+    ...context.knowledge.documents.map((document) => ({
+      id: `document:${document.id}`, petId: context.pet.id, occurredAt: document.importedAt, category: "DOCUMENT" as const, eventType: document.status === "VERIFIED" ? "DOCUMENT_VERIFIED" : "DOCUMENT_UPLOADED",
+      title: document.status === "VERIFIED" ? `${document.fileName} verified` : `${document.fileName} awaiting review`, description: `${document.category.replaceAll("_", " ").toLowerCase()} · ${document.extractedFields.length} extracted field${document.extractedFields.length === 1 ? "" : "s"}`, source: document.source === "VETERINARIAN" ? "VETERINARIAN" as const : "OWNER" as const, href: "/documents", sourceReference: documentSource(document),
+    })),
+    ...context.knowledge.memories.filter((memory) => memory.status !== "SUPERSEDED").map((memory) => ({
+      id: `memory:${memory.id}`, petId: context.pet.id, occurredAt: memory.recordedAt, category: "LIFE" as const, eventType: "PET_MEMORY_RECORDED",
+      title: memory.label, description: memory.kind === "AI_HYPOTHESIS" ? "AI hypothesis recorded separately from medical facts" : memory.value, source: memory.source === "VETERINARIAN" ? "VETERINARIAN" as const : memory.source === "WEARABLE" ? "WEARABLE" as const : memory.source === "AI" ? "AI" as const : "OWNER" as const, href: `/insights?pet=${encodeURIComponent(context.pet.id)}`, sourceReference: memorySource(memory),
+    })),
+    ...context.knowledge.outcomes.map((outcome) => ({
+      id: `outcome:${outcome.id}`, petId: context.pet.id, occurredAt: outcome.recordedAt, category: "INTELLIGENCE" as const, eventType: "OUTCOME_RECORDED",
+      title: `${outcome.actionLabel} — ${outcome.status.replaceAll("_", " ").toLowerCase()}`, description: outcome.note, source: "OWNER" as const, href: `/insights?pet=${encodeURIComponent(context.pet.id)}`, sourceReference: outcomeSource(outcome),
+    })),
   ];
 
   if (context.technology.locationPoints.length) {
@@ -400,9 +444,135 @@ export function calculatePetCareReadiness(context: PetContext, now = new Date(co
   };
 }
 
+export type PetFreshnessStatus = "CURRENT" | "AGING" | "ATTENTION" | "MISSING" | "NOT_CONNECTED";
+export interface PetDataFreshness {
+  id: string;
+  label: string;
+  status: PetFreshnessStatus;
+  detail: string;
+  lastUpdated?: string;
+  source?: PetSourceReference;
+}
+
+function ageInDays(value: string, now: Date) {
+  return Math.max(0, Math.floor((now.getTime() - dateAtMidday(value).getTime()) / dayMilliseconds));
+}
+
+/** Shows recency and verification quality; it never implies a clinical finding. */
+export function getPetDataFreshness(context: PetContext, now = new Date(context.generatedAt)): PetDataFreshness[] {
+  const latestVaccination = context.health.vaccinations[0];
+  const latestRecord = context.health.records[0];
+  const latestWeight = context.health.latestWeight;
+  const latestDocument = context.knowledge.documents[0];
+  const latestMetric = context.routine.latestMetric;
+  const vaccineStatus: PetFreshnessStatus = !latestVaccination ? "MISSING" : latestVaccination.nextDue && daysUntil(latestVaccination.nextDue, now) <= 0 ? "ATTENTION" : ageInDays(latestVaccination.administered, now) > 365 ? "AGING" : "CURRENT";
+  const recordAge = latestRecord ? ageInDays(latestRecord.date, now) : undefined;
+  const weightAge = latestWeight ? ageInDays(latestWeight.date, now) : undefined;
+  const documentStatus: PetFreshnessStatus = !latestDocument ? "MISSING" : latestDocument.status === "PENDING_REVIEW" ? "ATTENTION" : ageInDays(latestDocument.importedAt, now) > 365 ? "AGING" : "CURRENT";
+
+  return [
+    { id: "vaccinations", label: "Vaccination record", status: vaccineStatus, detail: !latestVaccination ? "No vaccination document or record is saved." : latestVaccination.nextDue ? `Last recorded ${latestVaccination.administered}; next due ${latestVaccination.nextDue}.` : `Last recorded ${latestVaccination.administered}.`, lastUpdated: latestVaccination?.administered, source: latestVaccination ? vaccinationSource(latestVaccination) : undefined },
+    { id: "weight", label: "Weight", status: !latestWeight ? "MISSING" : weightAge! > 120 ? "ATTENTION" : weightAge! > 60 ? "AGING" : "CURRENT", detail: !latestWeight ? "Add a factual measurement for trend review." : `${latestWeight.weight} kg recorded ${weightAge} day${weightAge === 1 ? "" : "s"} ago.`, lastUpdated: latestWeight?.date, source: latestWeight ? weightSource(latestWeight) : undefined },
+    { id: "health-history", label: "Health history", status: !latestRecord ? "MISSING" : recordAge! > 365 ? "AGING" : "CURRENT", detail: !latestRecord ? "No medical record is saved yet." : `${latestRecord.reason} was recorded ${recordAge} day${recordAge === 1 ? "" : "s"} ago.`, lastUpdated: latestRecord?.date, source: latestRecord ? recordSource(latestRecord) : undefined },
+    { id: "documents", label: "Documents", status: documentStatus, detail: !latestDocument ? "No document metadata is saved." : latestDocument.status === "PENDING_REVIEW" ? `${latestDocument.fileName} needs a human review.` : `${latestDocument.fileName} is marked verified.`, lastUpdated: latestDocument?.importedAt, source: latestDocument ? documentSource(latestDocument) : undefined },
+    { id: "wearable", label: "Wearable context", status: !context.technology.wearable ? "NOT_CONNECTED" : !latestMetric ? "ATTENTION" : ageInDays(latestMetric.date, now) > 7 ? "AGING" : "CURRENT", detail: !context.technology.wearable ? "No Health Band is connected." : !latestMetric ? "The device has no daily summary yet." : `Latest daily summary is from ${latestMetric.date}.`, lastUpdated: latestMetric?.date, source: context.technology.wearable ? wearableSource(context.pet.id) : undefined },
+    { id: "emergency-profile", label: "Emergency profile", status: context.identity.microchipId || context.identity.allergies.length || context.identity.conditions.length ? "CURRENT" : "MISSING", detail: context.identity.microchipId || context.identity.allergies.length || context.identity.conditions.length ? "Identity or important health facts are available for a handoff." : "Add microchip, allergy or condition details if applicable.", source: { id: `pet:${context.pet.id}`, label: "Pet profile", href: `/pets/${encodeURIComponent(context.pet.id)}`, sourceType: "pet" } },
+  ];
+}
+
+export interface PetOutcomeSummary {
+  total: number;
+  completed: number;
+  followUpNeeded: number;
+  notRelevant: number;
+  completionRate?: number;
+}
+
+export function summarizeInsightOutcomes(context: PetContext): PetOutcomeSummary {
+  const outcomes = context.knowledge.outcomes;
+  const completed = outcomes.filter((outcome) => outcome.status === "COMPLETED").length;
+  return {
+    total: outcomes.length,
+    completed,
+    followUpNeeded: outcomes.filter((outcome) => outcome.status === "FOLLOW_UP_NEEDED").length,
+    notRelevant: outcomes.filter((outcome) => outcome.status === "NOT_RELEVANT").length,
+    completionRate: outcomes.length ? Math.round((completed / outcomes.length) * 100) : undefined,
+  };
+}
+
+export interface PetWeeklyBrief {
+  petId: string;
+  generatedAt: string;
+  title: string;
+  activity: string;
+  care: string;
+  upcoming: string;
+  needsAttention: string[];
+  sources: PetSourceReference[];
+}
+
+/** A calm retention summary based only on recorded facts and active insights. */
+export function buildPetWeeklyBrief(context: PetContext, insights = generatePetInsights(context)): PetWeeklyBrief {
+  const metrics = context.technology.metrics;
+  const recentMetrics = metrics.slice(-7);
+  const priorMetrics = metrics.slice(-14, -7);
+  const recentAverage = recentMetrics.length ? recentMetrics.reduce((sum, item) => sum + item.activeMinutes, 0) / recentMetrics.length : undefined;
+  const priorAverage = priorMetrics.length ? priorMetrics.reduce((sum, item) => sum + item.activeMinutes, 0) / priorMetrics.length : undefined;
+  const activity = recentAverage === undefined ? "No wearable activity summary is recorded yet." : priorAverage === undefined || priorAverage === 0 ? `Latest recorded activity average: ${Math.round(recentAverage)} minutes per day.` : `Latest recorded activity average is ${Math.round(Math.abs(((recentAverage - priorAverage) / priorAverage) * 100))}% ${recentAverage >= priorAverage ? "above" : "below"} the prior recorded period.`;
+  const openCare = context.care.reminders.filter((reminder) => reminder.status !== "DONE");
+  const outcome = summarizeInsightOutcomes(context);
+  const upcomingAppointment = context.care.upcomingAppointments[0];
+  const upcomingReminder = context.care.reminders.find((reminder) => reminder.status !== "DONE");
+  return {
+    petId: context.pet.id,
+    generatedAt: context.generatedAt,
+    title: `${context.pet.name} this week`,
+    activity,
+    care: `${openCare.length} open care task${openCare.length === 1 ? "" : "s"}; ${outcome.completed} recorded action outcome${outcome.completed === 1 ? "" : "s"}.`,
+    upcoming: upcomingAppointment ? `${upcomingAppointment.reason} is scheduled for ${upcomingAppointment.date}.` : upcomingReminder ? `${upcomingReminder.title} is scheduled for ${upcomingReminder.date}.` : "No upcoming appointment or open care task is recorded.",
+    needsAttention: insights.slice(0, 3).map((insight) => insight.title),
+    sources: uniqueSources([...(recentMetrics.length ? [wearableSource(context.pet.id)] : []), ...insights.slice(0, 3).flatMap((insight) => insight.sources)]),
+  };
+}
+
+export interface PetVisitBrief {
+  petId: string;
+  petName: string;
+  preparedAt: string;
+  reason: string;
+  recentChanges: string[];
+  relevantHistory: string[];
+  currentMedication: string[];
+  ownerObservations: string[];
+  questions: string[];
+  sources: PetSourceReference[];
+  disclaimer: string;
+}
+
+/** Builds a factual pre-visit summary; it does not infer diagnosis or treatment. */
+export function buildPetVisitBrief(context: PetContext, reason?: string): PetVisitBrief {
+  const insights = generatePetInsights(context).filter((insight) => insight.importance !== "LOW").slice(0, 3);
+  const latestRecords = context.health.records.slice(0, 3);
+  const ownerObservations = context.knowledge.memories.filter((memory) => memory.source === "OWNER" && memory.status !== "SUPERSEDED").slice(0, 3);
+  const appointment = context.care.upcomingAppointments[0];
+  return {
+    petId: context.pet.id,
+    petName: context.pet.name,
+    preparedAt: context.generatedAt,
+    reason: reason ?? appointment?.reason ?? "Care review",
+    recentChanges: insights.length ? insights.map((insight) => insight.summary) : ["No material record-based change is currently flagged."],
+    relevantHistory: latestRecords.length ? latestRecords.map((record) => `${record.date}: ${record.reason}${record.followUp ? ` (follow-up ${record.followUp})` : ""}`) : ["No clinical record is saved yet."],
+    currentMedication: context.health.activeMedication.length ? context.health.activeMedication.map((medication) => `${medication.name} — ${medication.dosage || "dose not recorded"}, ${medication.frequency || "schedule not recorded"}`) : ["No active medication is recorded."],
+    ownerObservations: ownerObservations.length ? ownerObservations.map((memory) => `${memory.label}: ${memory.value}`) : ["No owner observation is recorded for this brief."],
+    questions: ["What changes should the owner monitor?", "Is follow-up needed, and when?", "Which passport record should be updated after this visit?"],
+    sources: uniqueSources([...(appointment ? [appointmentSource(appointment)] : []), ...latestRecords.map(recordSource), ...insights.flatMap((insight) => insight.sources), ...ownerObservations.map(memorySource)]),
+    disclaimer: "This brief summarizes authorized recorded information. A veterinarian remains responsible for clinical assessment, diagnosis and treatment decisions.",
+  };
+}
+
 /** Deterministic, source-linked observations. They intentionally avoid diagnosis and prescription. */
 export function generatePetInsights(context: PetContext, now = new Date(context.generatedAt)): PetInsight[] {
-  const insights: PetInsight[] = [];
+  const insights: PetInsightDraft[] = [];
   const createdAt = now.toISOString();
   const today = isoDate(now);
   const vaccinationDue = context.health.vaccinations
@@ -501,7 +671,24 @@ export function generatePetInsights(context: PetContext, now = new Date(context.
     });
   }
 
-  return insights.sort((left, right) => priorityRank(left.importance) - priorityRank(right.importance) || left.title.localeCompare(right.title));
+  const pendingDocument = context.knowledge.documents.find((document) => document.status === "PENDING_REVIEW");
+  if (pendingDocument) {
+    insights.push({
+      id: `document-review:${pendingDocument.id}`, petId: context.pet.id, type: "DOCUMENT_REVIEW", title: "A document is waiting for owner review",
+      summary: `${pendingDocument.fileName} has ${pendingDocument.extractedFields.length} suggested field${pendingDocument.extractedFields.length === 1 ? "" : "s"} that should be checked before they inform care records.`, why: "Imported file information is intentionally held for review rather than silently changing the passport.", importance: "MEDIUM", confidence: "MEDIUM",
+      action: { id: `review-document:${pendingDocument.id}`, label: "Review document", href: "/documents", description: "Confirm or correct the extracted metadata before using it.", priority: "MEDIUM" },
+      sources: [documentSource(pendingDocument)], createdAt,
+    });
+  }
+
+  return insights
+    .map((insight): PetInsight => ({
+      ...insight,
+      evidence: [insight.summary, insight.why],
+      timeSensitivity: insight.importance === "HIGH" ? "TODAY" : insight.importance === "MEDIUM" ? "THIS_WEEK" : "WHEN_PRACTICAL",
+      status: "ACTIVE",
+    }))
+    .sort((left, right) => priorityRank(left.importance) - priorityRank(right.importance) || left.title.localeCompare(right.title));
 }
 
 export function buildCarePlan(context: PetContext, insights = generatePetInsights(context)): PetCareTask[] {
@@ -569,11 +756,28 @@ export function buildPetAssistantResponse(question: string, context: PetContext,
       sources: [{ ...profileSource, label: "Emergency profile", href: `/emergency?pet=${encodeURIComponent(context.pet.id)}` }],
     };
   }
+  if (/weekly|this week|week review/.test(normalized)) {
+    const brief = buildPetWeeklyBrief(context, insights);
+    return { text: `${brief.title}: ${brief.activity} ${brief.care} ${brief.upcoming} ${brief.needsAttention.length ? `Worth reviewing: ${brief.needsAttention.join("; ")}.` : ""} This is a summary of recorded information, not a clinical assessment.`, sources: brief.sources };
+  }
+  if (/document|certificate|prescription|file|report/.test(normalized)) {
+    const documents = context.knowledge.documents;
+    const pending = documents.filter((document) => document.status === "PENDING_REVIEW");
+    return documents.length
+      ? { text: `${name} has ${documents.length} document metadata entr${documents.length === 1 ? "y" : "ies"}; ${pending.length ? `${pending.length} await${pending.length === 1 ? "s" : ""} human review before informing care records.` : "the recorded metadata is marked verified."} The system does not interpret raw documents or make a diagnosis.`, sources: uniqueSources(documents.slice(0, 4).map(documentSource)) }
+      : { text: `There is no document metadata recorded for ${name} yet. You can add a certificate, prescription, report, or photo to the review queue; review it before it influences care records.`, sources: [] };
+  }
+  if (/memory|preference|owner observation|routine note/.test(normalized)) {
+    const memories = context.knowledge.memories.filter((memory) => memory.status !== "SUPERSEDED");
+    return memories.length
+      ? { text: `${name}'s saved context includes ${memories.slice(0, 3).map((memory) => `${memory.label}: ${memory.value}`).join(" ")} These are source-tagged context notes, not clinical findings.`, sources: uniqueSources(memories.slice(0, 3).map(memorySource)) }
+      : { text: `There are no saved context notes for ${name} yet. You can add an owner observation or preference in Pet Insights, then verify it when appropriate.`, sources: [] };
+  }
   if (/summary|summari[sz]e|last year|history/.test(normalized)) {
     const latest = context.health.latestVetVisit;
     const next = context.care.upcomingAppointments[0];
     const parts = [
-      `${name}'s authorized record contains ${context.health.records.length} health entr${context.health.records.length === 1 ? "y" : "ies"}, ${context.health.vaccinations.length} vaccination record${context.health.vaccinations.length === 1 ? "" : "s"}, and ${context.health.weights.length} weight entr${context.health.weights.length === 1 ? "y" : "ies"}.`,
+      `${name}'s authorized record contains ${context.health.records.length} health entr${context.health.records.length === 1 ? "y" : "ies"}, ${context.health.vaccinations.length} vaccination record${context.health.vaccinations.length === 1 ? "" : "s"}, ${context.health.weights.length} weight entr${context.health.weights.length === 1 ? "y" : "ies"}, and ${context.knowledge.documents.length} document metadata entr${context.knowledge.documents.length === 1 ? "y" : "ies"}.`,
       latest ? `The latest recorded visit was ${latest.reason} on ${latest.date}.` : "No veterinary visit is recorded yet.",
       next ? `The next scheduled visit is ${next.reason} on ${next.date} at ${next.time}.` : "There is no upcoming veterinary appointment recorded.",
     ];
@@ -606,10 +810,8 @@ export function buildPetAssistantResponse(question: string, context: PetContext,
       : { text: `I can help compare non-prescription products for ${name}, but I do not have a catalog match in this authorized context. Check ingredients against the saved allergies and ask a veterinarian before making a diet change for a medical reason.`, sources: [profileSource] };
   }
   if (/vet|appointment|prepare/.test(normalized)) {
-    const appointment = context.care.upcomingAppointments[0];
-    const latest = context.health.latestVetVisit;
-    const lines = [appointment ? `${name}'s next recorded visit is ${appointment.reason} on ${appointment.date} at ${appointment.time}.` : `There is no upcoming visit recorded for ${name}.`, latest ? `Bring up the latest record: ${latest.reason} on ${latest.date}.` : "Bring the relevant observations you have logged.", context.identity.allergies.length ? `Mention recorded allergies: ${context.identity.allergies.join(", ")}.` : "Confirm whether there are any new allergies or reactions.", "Helpful questions: what changes should I monitor, when is follow-up needed, and which passport records should be updated after the visit?"];
-    return { text: `${lines.join(" ")} PetCare AI does not diagnose or replace a veterinarian.`, sources: uniqueSources([...(appointment ? [appointmentSource(appointment)] : []), ...(latest ? [recordSource(latest)] : [])]) };
+    const brief = buildPetVisitBrief(context);
+    return { text: `${name}'s visit brief is prepared for ${brief.reason}. Recent changes: ${brief.recentChanges.join(" ")} Relevant history: ${brief.relevantHistory.join(" ")} Owner observations: ${brief.ownerObservations.join(" ")} Questions to discuss: ${brief.questions.join(" ")} ${brief.disclaimer}`, sources: brief.sources };
   }
   const top = insights[0];
   return top

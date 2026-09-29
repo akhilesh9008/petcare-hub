@@ -12,7 +12,7 @@ import { buildPetContext, calculatePetCareReadiness, generatePetInsights, getNex
 
 export default function PetProfilePage() {
   const { id } = useParams<{ id: string }>();
-  const { pets, records, vaccinations, medications, weights, reminders, appointments, orders, bookings, providers, vets, bands, bandMetrics, habits, bandAlerts, locationPoints, products, updatePet } = usePetcare();
+  const { pets, records, vaccinations, medications, weights, reminders, appointments, orders, bookings, providers, vets, bands, bandMetrics, habits, bandAlerts, locationPoints, memories, documents, insightOutcomes, products, updatePet } = usePetcare();
   const [editing, setEditing] = useState(false);
   const pet = pets.find((item) => item.id === id);
 
@@ -27,7 +27,7 @@ export default function PetProfilePage() {
   const petReminders = reminders.filter((item) => item.petId === pet.id && item.status !== "DONE").sort((left, right) => `${left.date}${left.time}`.localeCompare(`${right.date}${right.time}`));
   const petAppointments = appointments.filter((item) => item.petId === pet.id);
   const petBand = bands.find((item) => item.petId === pet.id);
-  const petContext = buildPetContext({ pet, records, vaccinations, medications, weights, reminders, appointments, orders, bookings, providers, vets, bands, bandMetrics, habits, bandAlerts, locationPoints, products });
+  const petContext = buildPetContext({ pet, records, vaccinations, medications, weights, reminders, appointments, orders, bookings, providers, vets, bands, bandMetrics, habits, bandAlerts, locationPoints, memories, documents, insightOutcomes, products });
   const petInsights = generatePetInsights(petContext);
   const careReadiness = calculatePetCareReadiness(petContext);
   const nextActions = getNextBestActions(petInsights, 3);

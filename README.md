@@ -22,7 +22,9 @@ The app is usable locally without paid services. Its default local mode persists
 - Searchable/filterable marketplace, profile-aware non-prescription recommendations, cart, mock checkout and order history
 - Service discovery, provider profiles, bookings and provider workflow
 - A scoped PetCare AI chat that summarizes recorded history, prepares vet visits, notices wearable trends and gives profile-aware product context with clear veterinary safety boundaries
-- Pet Digital Twin / Pet Insights: a pet-scoped, source-linked view that connects health, care, routine, wearable, GPS and purchase records to Care Readiness, explainable insights and next best actions
+- Pet Digital Twin / Pet Insights: a pet-scoped, source-linked view that connects health, care, routine, documents, wearable, GPS and purchase records to Care Readiness, data freshness, weekly briefs, explainable insights, next best actions and recorded outcomes
+- Review-first document inbox: device-selected PDF/image metadata, a clear human-verification queue and provenance-safe timeline events (raw document storage is intentionally not enabled in local mode)
+- Vet-ready pre-visit brief: relevant history, current medication, owner observations, evidence-linked changes and discussion prompts, shown only through the appointment workflow in the local vet workspace
 - Private Health Band API with authenticated pet ownership checks and deterministic demo syncs
 - Owner, veterinarian, provider and admin dashboard experiences
 - Prisma schema for users, pets, records, bookings, marketplace, reminders, notifications, reviews, AI conversations and wearable wellness aggregates
@@ -70,7 +72,7 @@ The PostgreSQL seed uses `PetCare@123` for every seeded user; it prints represen
 ## Local persistence
 
 - New accounts, hashed credentials, sessions and API records are retained in `data/petcare-hub.local.json` when running locally.
-- Pet profiles, device-photo data, records, reminders, band history, AI conversations, social posts and place shortlists are separated by signed-in user in browser local storage.
+- Pet profiles, device-photo data, records, reminders, document metadata, source-tagged context notes, recorded insight outcomes, band history, AI conversations, social posts and place shortlists are separated by signed-in user in browser local storage.
 - Professional workspace setup and the chosen language are also browser-local in demo mode.
 - Bluetooth device permission and GPS tracking require an explicit browser prompt. GPS route points are stored only in the current signed-in browser workspace and can be cleared from Health Band.
 - The local JSON file is ignored by Git. Use Prisma/PostgreSQL and object storage before production deployment or multi-device sharing.
@@ -128,8 +130,9 @@ The original feature set remains intact, but the owner experience is now organiz
 Pet profile / passport
   -> Health: records, vaccinations, medication, weight
   -> Care: reminders, vet appointments, service bookings
-  -> Life: habits, Health Band summaries, consented GPS route, orders
-  -> Pet Intelligence: care readiness, source-linked insights, next actions
+  -> Life: habits, Health Band summaries, consented GPS route, orders, owner context
+  -> Documents: review-first file metadata and verified fields
+  -> Pet Intelligence: care readiness, freshness, weekly brief, source-linked insights and outcomes
   -> Actions: veterinarian, calendar, service, marketplace, AI vet preparation
 ```
 
@@ -137,14 +140,14 @@ Pet profile / passport
 
 ### Current event and intelligence model
 
-- Event categories: `HEALTH`, `CARE`, `LIFE`, `ACTIVITY`, `LOCATION`, `COMMERCE`, and `PLANNING`
-- Event sources: owner, veterinarian, service provider, wearable and system
-- Record-based insights: vaccine due, overdue task, upcoming appointment, recorded follow-up, weight trend/gap, Health Band observation and pending service booking
+- Event categories: `HEALTH`, `CARE`, `LIFE`, `ACTIVITY`, `LOCATION`, `COMMERCE`, `PLANNING`, `DOCUMENT`, and `INTELLIGENCE`
+- Event sources: owner, veterinarian, service provider, wearable, system and AI (AI hypotheses remain distinct from facts)
+- Record-based insights: vaccine due, overdue task, upcoming appointment, recorded follow-up, weight trend/gap, Health Band observation, pending service booking and document review
 - Care Readiness: a 0-100 completeness score for documented care, explicitly not a health score or diagnosis
-- AI responses: deterministic, pet-scoped summaries with clickable source links to the record, calendar, appointment or Health Band screen used
-- Owner controls: insights can be dismissed or snoozed locally without changing the underlying care record
+- AI responses: deterministic, pet-scoped summaries, document/memory status, weekly briefs and vet preparation with clickable source links to the record, calendar, appointment, document or Health Band screen used
+- Owner controls: insights can be dismissed, snoozed, or given a recorded outcome locally without changing their original evidence or medical record
 
-The current implementation is a modular-monolith foundation. In local demo mode, the UI reads the signed-in browser workspace; server APIs already enforce pet ownership and authorized veterinarian access. A production rollout should persist the event projection, insights, consent grants and audit log in PostgreSQL, then have server-side workers generate reminders and intelligence snapshots.
+The current implementation is a modular-monolith foundation. In local demo mode, the UI reads the signed-in browser workspace; server APIs already enforce pet ownership and authorized veterinarian access. A production rollout should persist the event projection, insights, consent grants and audit log in PostgreSQL, then have server-side workers generate reminders and intelligence snapshots. See [the Digital Life OS audit](docs/pet-digital-life-os-audit.md) for the proposed production data, API, UX and rollout architecture.
 
 The UI is intentionally independent of paid infrastructure. Replace the local store/service adapters progressively:
 
@@ -154,6 +157,7 @@ The UI is intentionally independent of paid infrastructure. Replace the local st
 4. Add email/push/SMS adapters to notification delivery.
 5. Connect an approved AI provider behind the PetCare AI safety wrapper.
 6. Replace the deterministic Health Band sync boundary with a verified wearable-provider webhook and consent flow for vendor-specific activity, sleep and unattended GPS data.
+7. Add time-bound share links, explicit care-team consent scopes, revocation, access logs and server-side audit events before allowing a passport outside the owner workspace.
 
 ## Safety and privacy
 
